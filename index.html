@@ -337,7 +337,7 @@
       </div>
       <div class="slider-block">
         <div class="slider-row"><span>Hit sensitivity &mdash; lower includes more</span><span class="v"><span id="sensVal">50</span>%</span></div>
-        <input type="range" id="sensSlider" min="5" max="95" value="50" style="--track-color: var(--magenta);">
+        <input type="range" id="sensSlider" min="5" max="95" value="35" style="--track-color: var(--magenta);">
       </div>
     </div>
 
@@ -383,7 +383,7 @@ async function enableMic(){
   err.style.display = 'none';
   btn.textContent = 'Requesting access\u2026';
   try{
-    micStream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false } });
+    micStream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:true } });
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     recordedSampleRate = audioCtx.sampleRate;
     sourceNode = audioCtx.createMediaStreamSource(micStream);
@@ -460,8 +460,9 @@ function stopRecording(){
     return;
   }
 
+  const normalized = normalizeSamples(samples);
   showScreen('screen-processing');
-  setTimeout(() => runAnalysis(samples, recordedSampleRate), 60);
+  setTimeout(() => runAnalysis(normalized, recordedSampleRate), 60);
 }
 
 function tickRecordTimer(){
@@ -542,8 +543,9 @@ function startRecScopeLoop(){
     ctx.lineWidth = 2;
     ctx.beginPath();
     const step = w / data.length;
+    const visualBoost = 2.4; // amplify on-screen only, for feedback on quiet mics
     for (let i=0;i<data.length;i++){
-      const v = data[i]/128 - 1;
+      const v = clamp((data[i]/128 - 1) * visualBoost, -1, 1);
       const y = h/2 + v*(h/2-6);
       const x = i*step;
       if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
@@ -566,6 +568,17 @@ showScreen = function(id){
 
 /* ================= ANALYSIS ================= */
 const RES = 64; // fixed internal analysis resolution, downsampled to step count later
+
+function normalizeSamples(samples){
+  let peak = 0;
+  for (let i=0;i<samples.length;i++){ const a = Math.abs(samples[i]); if (a>peak) peak = a; }
+  if (peak < 0.0008) return samples; // essentially silent, don't blow up noise floor
+  const targetPeak = 0.9;
+  const gain = Math.min(targetPeak/peak, 18);
+  if (gain <= 1.05) return samples; // already loud enough
+  for (let i=0;i<samples.length;i++) samples[i] = clamp(samples[i]*gain, -1, 1);
+  return samples;
+}
 
 function zeroCrossingRate(buf){
   let z = 0;
@@ -631,7 +644,7 @@ function classifyOnset(samples, sampleRate, onset){
   if (low >= mid && low >= high) type = 'kick';
   else if (zcr > 0.15 && high >= mid) type = 'hihat';
   else type = 'snare';
-  const velocity = clamp(Math.sqrt(total/winLen) * 7, 0.15, 1);
+  const velocity = clamp(Math.sqrt(total/winLen) * 7, 0.05, 1);
   return { type, velocity, sampleIndex: onset.sampleIndex, time: onset.time };
 }
 
@@ -750,7 +763,7 @@ function analyzeAudio(samples, sampleRate){
     const win = samples.subarray(wStart, wStart+windowLen);
     const { freq, rms } = autoCorrelate(win, sampleRate);
     if (freq > 60 && freq < 1200 && rms > 0.009){
-      noteSlices.push({ hasNote:true, midi: Math.round(freqToMidi(freq)), velocity: clamp(rms*9, 0.15, 1) });
+      noteSlices.push({ hasNote:true, midi: Math.round(freqToMidi(freq)), velocity: clamp(rms*9, 0.05, 1) });
     } else {
       noteSlices.push({ hasNote:false, midi:0, velocity:0 });
     }
@@ -790,7 +803,7 @@ let params = {
   cutoff: 1200,
   resonance: 1,
   wSynth: 0.8, wKick: 0.9, wSnare: 0.75, wHihat: 0.65,
-  sensitivity: 0.5
+  sensitivity: 0.35
 };
 
 function buildStepsFromAnalysis(analysis, count){
@@ -1082,7 +1095,7 @@ function playSynthNote(time, midi, velocity, weight, dur){
   const osc = audioCtx.createOscillator(); osc.type = params.waveform;
   osc.frequency.value = midiToFreq(midi);
   const g = audioCtx.createGain();
-  const peak = clamp(velocity*weight*0.32, 0.0015, 0.9);
+  const peak = clamp(velocity*weight*0.5, 0.02, 0.9);
   g.gain.setValueAtTime(0.0001, time);
   g.gain.exponentialRampToValueAtTime(peak, time+0.012);
   g.gain.exponentialRampToValueAtTime(0.0001, time + Math.max(0.05, dur*0.92));
@@ -1103,7 +1116,7 @@ function secondsPerStep(){ return (240/params.bpm) / stepCount; }
 function scheduleStep(idx, time){
   const st = steps[idx];
   if (!st) return;
-  if (st.nOn && st.note) playSynthNote(time, st.note.midi, st.note.vel, params.wSynth, secondsPerStep()*1.6);
+  if (st.nOn && st.note) playSynthNote(time, st.note.midi, Math.max(st.note.vel, 0.55), params.wSynth, secondsPerStep()*1.6);
   if (st.kOn) playKick(time, Math.max(st.kick,0.6), params.wKick);
   if (st.sOn) playSnare(time, Math.max(st.snare,0.6), params.wSnare);
   if (st.hOn) playHihat(time, Math.max(st.hihat,0.6), params.wHihat);
