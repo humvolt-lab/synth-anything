@@ -71,16 +71,11 @@
   .screen.active{ display:flex; }
 
   /* ---------- init screen ---------- */
-  #screen-init{ justify-content:center; align-items:center; text-align:center; gap:26px; }
-  .hero-scope{ width:100%; max-width:340px; height:130px; }
+  #screen-init{ justify-content:center; align-items:center; text-align:center; gap:16px; }
   .eyebrow{ font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:var(--amber); }
-  h1.title{ font-size:34px; line-height:1.05; margin:8px 0 0; font-weight:900; }
+  h1.title{ font-size:30px; line-height:1.08; margin:6px 0 0; font-weight:900; }
   h1.title .accent{ color:var(--cyan); }
-  p.lede{ color:var(--text-dim); font-size:14.5px; line-height:1.55; max-width:340px; margin:0; }
-  .steps-hint{ display:flex; gap:14px; margin-top:4px; }
-  .steps-hint .step{ display:flex; flex-direction:column; align-items:center; gap:6px; width:80px; }
-  .steps-hint .num{ font-family:'Unbounded'; font-size:12px; color:var(--text-dimmer); }
-  .steps-hint .lbl{ font-size:10.5px; color:var(--text-dim); text-align:center; line-height:1.3; }
+  p.lede{ color:var(--text-dim); font-size:14px; line-height:1.5; max-width:300px; margin:0; }
 
   .btn{
     font-family:'JetBrains Mono', monospace; font-weight:700; letter-spacing:.04em;
@@ -90,7 +85,7 @@
   }
   .btn-primary{
     background: linear-gradient(180deg, #FFC24F, var(--amber));
-    color:#1a1305; padding:16px 30px; font-size:15px;
+    color:#1a1305; padding:15px 28px; font-size:15px; margin-top:6px;
     box-shadow: 0 6px 0 #b87a10, 0 10px 20px rgba(255,176,32,.25);
   }
   .btn-primary:active{ transform: translateY(4px); box-shadow: 0 2px 0 #b87a10; }
@@ -232,17 +227,9 @@
 
   <!-- ============ INIT SCREEN ============ -->
   <div class="screen active" id="screen-init">
-    <canvas class="hero-scope" id="heroScope"></canvas>
-    <div>
-      <div class="eyebrow">tape in &rarr; synth out</div>
-      <h1 class="title">Say something.<br>Get a <span class="accent">loop</span> back.</h1>
-    </div>
-    <p class="lede">Resample listens to up to 8 seconds of audio, then reverse&#8209;engineers it into a step&#8209;sequenced synth &amp; drum loop you can reshape by hand.</p>
-    <div class="steps-hint">
-      <div class="step"><div class="num">01</div><div class="lbl">Record a short snippet</div></div>
-      <div class="step"><div class="num">02</div><div class="lbl">We detect pitch, beat &amp; tone</div></div>
-      <div class="step"><div class="num">03</div><div class="lbl">Tweak every parameter</div></div>
-    </div>
+    <div class="eyebrow">tape in &rarr; synth out</div>
+    <h1 class="title">Say something.<br>Get a <span class="accent">loop</span> back.</h1>
+    <p class="lede">Record up to 8 seconds. Resample turns it into an editable synth &amp; drum loop.</p>
     <button class="btn btn-primary" id="enableMicBtn">&#127908;&nbsp; Enable microphone</button>
     <div class="mic-err" id="micErr"></div>
   </div>
@@ -299,7 +286,7 @@
         <div class="wave-chip" data-wave="square"><svg viewBox="0 0 26 16"><path d="M1 2 L1 14 L13 14 L13 2 L25 2 L25 14" fill="none" stroke="#8A8F98" stroke-width="1.6"/></svg></div>
       </div>
 
-      <div class="section-title" style="margin-top:6px;"><span class="swatch" style="background:var(--cyan)"></span>Filter</div>
+      <div class="section-title" style="margin-top:6px;"><span class="swatch" style="background:var(--cyan)"></span>Filter <span style="color:var(--text-dimmer); text-transform:none; letter-spacing:0;">&mdash; synth only</span></div>
       <div class="filter-type-row" id="filterTypeRow">
         <div class="ftype-chip active" data-ftype="lowpass">Low&#8209;pass</div>
         <div class="ftype-chip" data-ftype="highpass">High&#8209;pass</div>
@@ -391,7 +378,6 @@ async function enableMic(){
     analyserNode.fftSize = 1024;
     sourceNode.connect(analyserNode);
     showScreen('screen-record');
-    startIdleScopeLoop();
   }catch(e){
     btn.textContent = '\ud83c\udfa4\u00a0 Enable microphone';
     err.style.display = 'block';
@@ -510,26 +496,7 @@ function setupCanvas(canvas){
   return { ctx, w: rect.width, h: rect.height };
 }
 
-let idleScopeRAF = null;
-function startIdleScopeLoop(){
-  const canvas = $('heroScope');
-  const {ctx, w, h} = setupCanvas(canvas);
-  let t = 0;
-  function draw(){
-    ctx.clearRect(0,0,w,h);
-    ctx.strokeStyle = '#4FD6E8';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    for (let x=0;x<=w;x+=2){
-      const y = h/2 + Math.sin(x*0.04 + t)*14*Math.sin(t*0.6) + Math.sin(x*0.11+t*1.7)*6;
-      if (x===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-    }
-    ctx.stroke();
-    t += 0.045;
-    idleScopeRAF = requestAnimationFrame(draw);
-  }
-  draw();
-}
+let idleScopeRAF = null; // reserved (unused now that init screen has no hero scope)
 
 let recScopeRAF = null;
 function startRecScopeLoop(){
@@ -1035,18 +1002,26 @@ $('regenBtn').addEventListener('click', () => {
 });
 
 /* ================= synth engine ================= */
-let masterGain = null, filterNode = null, compressor = null, noiseBuffer = null;
+let synthBus = null, drumBus = null, filterNode = null, compressor = null, noiseBuffer = null;
 function ensurePlaybackGraph(){
-  if (masterGain) return;
-  masterGain = audioCtx.createGain();
-  masterGain.gain.value = 0.9;
+  if (synthBus) return;
+  // Synth voice runs through the adjustable filter; drums bypass it entirely
+  // so filter changes only reshape the synth, never the beat.
+  synthBus = audioCtx.createGain();
+  synthBus.gain.value = 1;
+  drumBus = audioCtx.createGain();
+  drumBus.gain.value = 1;
+
   filterNode = audioCtx.createBiquadFilter();
   filterNode.type = params.filterType;
   filterNode.frequency.value = params.cutoff;
   filterNode.Q.value = params.resonance;
+
   compressor = audioCtx.createDynamicsCompressor();
-  masterGain.connect(filterNode);
+
+  synthBus.connect(filterNode);
   filterNode.connect(compressor);
+  drumBus.connect(compressor);
   compressor.connect(audioCtx.destination);
 
   noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate*1, audioCtx.sampleRate);
@@ -1062,7 +1037,7 @@ function playKick(time, velocity, weight){
   const peak = clamp(velocity*weight, 0.001, 1);
   g.gain.setValueAtTime(peak, time);
   g.gain.exponentialRampToValueAtTime(0.001, time+0.22);
-  osc.connect(g); g.connect(masterGain);
+  osc.connect(g); g.connect(drumBus);
   osc.start(time); osc.stop(time+0.24);
 }
 function playSnare(time, velocity, weight){
@@ -1072,14 +1047,14 @@ function playSnare(time, velocity, weight){
   const peak = clamp(velocity*weight*0.8, 0.001, 1);
   ng.gain.setValueAtTime(peak, time);
   ng.gain.exponentialRampToValueAtTime(0.001, time+0.15);
-  noise.connect(bp); bp.connect(ng); ng.connect(masterGain);
+  noise.connect(bp); bp.connect(ng); ng.connect(drumBus);
   noise.start(time); noise.stop(time+0.16);
 
   const osc = audioCtx.createOscillator(); osc.type='triangle'; osc.frequency.value=190;
   const og = audioCtx.createGain();
   og.gain.setValueAtTime(clamp(velocity*weight*0.5,0.001,1), time);
   og.gain.exponentialRampToValueAtTime(0.001, time+0.1);
-  osc.connect(og); og.connect(masterGain);
+  osc.connect(og); og.connect(drumBus);
   osc.start(time); osc.stop(time+0.11);
 }
 function playHihat(time, velocity, weight){
@@ -1088,7 +1063,7 @@ function playHihat(time, velocity, weight){
   const g = audioCtx.createGain();
   g.gain.setValueAtTime(clamp(velocity*weight*0.5,0.001,1), time);
   g.gain.exponentialRampToValueAtTime(0.001, time+0.05);
-  noise.connect(hp); hp.connect(g); g.connect(masterGain);
+  noise.connect(hp); hp.connect(g); g.connect(drumBus);
   noise.start(time); noise.stop(time+0.06);
 }
 function playSynthNote(time, midi, velocity, weight, dur){
@@ -1099,7 +1074,7 @@ function playSynthNote(time, midi, velocity, weight, dur){
   g.gain.setValueAtTime(0.0001, time);
   g.gain.exponentialRampToValueAtTime(peak, time+0.012);
   g.gain.exponentialRampToValueAtTime(0.0001, time + Math.max(0.05, dur*0.92));
-  osc.connect(g); g.connect(masterGain);
+  osc.connect(g); g.connect(synthBus);
   osc.start(time); osc.stop(time + dur);
 }
 
