@@ -177,15 +177,14 @@
 
   .row-2col{ display:grid; grid-template-columns:1.3fr 1fr; gap:10px; }
 
-  .wave-row{ display:grid; grid-template-columns:1fr 1fr; gap:6px; }
-  .wave-chip{ padding:7px 0; text-align:center; border-radius:9px; border:1px solid var(--line); background:var(--panel-2); }
-  .wave-chip svg{ width:22px; height:13px; display:block; margin:0 auto; }
-  .wave-chip.active{ border-color:var(--green); background: rgba(110,231,160,.08); }
-  .wave-chip.active svg path{ stroke:var(--green); }
-
-  .filter-type-row{ display:flex; flex-direction:column; gap:6px; }
-  .ftype-chip{ padding:6px 0; text-align:center; border-radius:9px; border:1px solid var(--line); background:var(--panel-2); color:var(--text-dim); font-size:11px; font-weight:700; }
-  .ftype-chip.active{ background:var(--cyan); color:#06272b; border-color:var(--cyan); }
+  .cycle-btn{
+    width:100%; display:flex; align-items:center; justify-content:center; gap:8px;
+    padding:9px 6px; border-radius:9px; border:1px solid var(--line); background:var(--panel-2);
+    color:var(--text); font-family:'JetBrains Mono', monospace; font-size:11.5px; font-weight:700;
+  }
+  .cycle-btn svg{ display:block; flex-shrink:0; }
+  .cycle-btn .cyc-hint{ color:var(--text-dimmer); font-size:12px; margin-left:2px; }
+  .cycle-btn:active{ transform: translateY(1px); }
 
   .dual-slider-row{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
   .slider-block{ padding:0; }
@@ -260,20 +259,11 @@
       <div class="row-2col">
         <div>
           <div class="section-title"><span class="swatch" style="background:var(--green)"></span>Waveform</div>
-          <div class="wave-row" id="waveRow">
-            <div class="wave-chip" data-wave="sine"><svg viewBox="0 0 26 16"><path d="M1 8 Q 7 1 13 8 T 25 8" fill="none" stroke="#8A8F98" stroke-width="1.6"/></svg></div>
-            <div class="wave-chip" data-wave="triangle"><svg viewBox="0 0 26 16"><path d="M1 8 L7 1 L19 15 L25 8" fill="none" stroke="#8A8F98" stroke-width="1.6"/></svg></div>
-            <div class="wave-chip" data-wave="sawtooth"><svg viewBox="0 0 26 16"><path d="M1 14 L1 2 L13 14 L13 2 L25 14" fill="none" stroke="#8A8F98" stroke-width="1.6"/></svg></div>
-            <div class="wave-chip" data-wave="square"><svg viewBox="0 0 26 16"><path d="M1 2 L1 14 L13 14 L13 2 L25 2 L25 14" fill="none" stroke="#8A8F98" stroke-width="1.6"/></svg></div>
-          </div>
+          <button class="cycle-btn" id="waveBtn"></button>
         </div>
         <div>
           <div class="section-title"><span class="swatch" style="background:var(--cyan)"></span>Filter</div>
-          <div class="filter-type-row" id="filterTypeRow">
-            <div class="ftype-chip active" data-ftype="lowpass">LP</div>
-            <div class="ftype-chip" data-ftype="highpass">HP</div>
-            <div class="ftype-chip" data-ftype="bandpass">BP</div>
-          </div>
+          <button class="cycle-btn" id="filterBtn"></button>
         </div>
       </div>
 
@@ -771,6 +761,7 @@ function buildStepsFromAnalysis(analysis, count){
     });
   }
   applyThresholds(out);
+  completeDrumPattern(out, count);
   return out;
 }
 
@@ -782,6 +773,42 @@ function applyThresholds(arr){
     st.sOn = st.snare >= thr;
     st.hOn = st.hihat >= thr;
   });
+}
+
+/* If a beat was picked up at all but only 1 or 2 of {kick, snare, hihat}
+   actually got hits, fill in the missing element(s) with a complementary
+   pattern (kick on 1 & 3, snare backbeat on 2 & 4, steady 8th-note hihat)
+   so the loop still feels like a full drum part. If nothing rhythmic was
+   detected at all, leave it silent rather than inventing a beat from thin air. */
+function completeDrumPattern(arr, count){
+  const hasKick = arr.some(s => s.kOn);
+  const hasSnare = arr.some(s => s.sOn);
+  const hasHihat = arr.some(s => s.hOn);
+  const presentCount = [hasKick, hasSnare, hasHihat].filter(Boolean).length;
+  if (presentCount === 0 || presentCount === 3) return;
+
+  function setHit(fraction, type, vel){
+    const idx = ((Math.round(fraction*count) % count) + count) % count;
+    const st = arr[idx];
+    if (type === 'kick'){ st.kOn = true; st.kick = Math.max(st.kick, vel); }
+    if (type === 'snare'){ st.sOn = true; st.snare = Math.max(st.snare, vel); }
+    if (type === 'hihat'){ st.hOn = true; st.hihat = Math.max(st.hihat, vel); }
+  }
+
+  if (!hasKick){
+    setHit(0, 'kick', 0.75);
+    setHit(0.5, 'kick', 0.7);
+  }
+  if (!hasSnare){
+    setHit(0.25, 'snare', 0.65);
+    setHit(0.75, 'snare', 0.65);
+  }
+  if (!hasHihat){
+    const hatEvery = Math.max(1, Math.round(count/8));
+    for (let i=0;i<count;i+=hatEvery){
+      setHit(i/count, 'hihat', (i % (hatEvery*2)===0) ? 0.55 : 0.4);
+    }
+  }
 }
 
 /* ================= run full analysis -> editor ================= */
@@ -830,17 +857,46 @@ function drawStaticEditorScope(samples, sampleRate){
   ctx.stroke();
 }
 
+/* ================= waveform / filter cycle buttons ================= */
+const WAVEFORMS = [
+  { key:'sine', label:'Sine', path:'M1 8 Q 7 1 13 8 T 25 8' },
+  { key:'triangle', label:'Triangle', path:'M1 8 L7 1 L19 15 L25 8' },
+  { key:'sawtooth', label:'Saw', path:'M1 14 L1 2 L13 14 L13 2 L25 14' },
+  { key:'square', label:'Square', path:'M1 2 L1 14 L13 14 L13 2 L25 2 L25 14' }
+];
+const FILTER_TYPES = [
+  { key:'lowpass', label:'Low-pass' },
+  { key:'highpass', label:'High-pass' },
+  { key:'bandpass', label:'Band-pass' }
+];
+
+function renderWaveBtn(){
+  const w = WAVEFORMS.find(x => x.key === params.waveform) || WAVEFORMS[0];
+  $('waveBtn').innerHTML = '<svg viewBox="0 0 26 16" width="22" height="13"><path d="'+w.path+'" fill="none" stroke="#6EE7A0" stroke-width="1.6"/></svg><span>'+w.label+'</span><span class="cyc-hint">&#8635;</span>';
+}
+function renderFilterBtn(){
+  const f = FILTER_TYPES.find(x => x.key === params.filterType) || FILTER_TYPES[0];
+  $('filterBtn').innerHTML = '<span>'+f.label+'</span><span class="cyc-hint">&#8635;</span>';
+}
+$('waveBtn').addEventListener('click', () => {
+  const idx = WAVEFORMS.findIndex(x => x.key === params.waveform);
+  params.waveform = WAVEFORMS[(idx+1) % WAVEFORMS.length].key;
+  renderWaveBtn();
+});
+$('filterBtn').addEventListener('click', () => {
+  const idx = FILTER_TYPES.findIndex(x => x.key === params.filterType);
+  params.filterType = FILTER_TYPES[(idx+1) % FILTER_TYPES.length].key;
+  renderFilterBtn();
+  if (filterNode) filterNode.type = params.filterType;
+});
+
 /* ================= UI sync ================= */
 function syncUIToParams(){
   $('bpmSlider').value = params.bpm;
   $('bpmVal').textContent = params.bpm;
 
-  document.querySelectorAll('#waveRow .wave-chip').forEach(c => {
-    c.classList.toggle('active', c.dataset.wave === params.waveform);
-  });
-  document.querySelectorAll('#filterTypeRow .ftype-chip').forEach(c => {
-    c.classList.toggle('active', c.dataset.ftype === params.filterType);
-  });
+  renderWaveBtn();
+  renderFilterBtn();
 
   const cutoffPct = Math.round(100 * (Math.log(params.cutoff/200) / Math.log(16000/200)));
   $('cutoffSlider').value = clamp(cutoffPct,0,100);
@@ -860,21 +916,6 @@ function syncUIToParams(){
 $('bpmSlider').addEventListener('input', e => {
   params.bpm = parseInt(e.target.value,10);
   $('bpmVal').textContent = params.bpm;
-});
-
-document.querySelectorAll('#waveRow .wave-chip').forEach(chip => {
-  chip.addEventListener('click', () => {
-    params.waveform = chip.dataset.wave;
-    document.querySelectorAll('#waveRow .wave-chip').forEach(c=>c.classList.toggle('active', c===chip));
-  });
-});
-
-document.querySelectorAll('#filterTypeRow .ftype-chip').forEach(chip => {
-  chip.addEventListener('click', () => {
-    params.filterType = chip.dataset.ftype;
-    document.querySelectorAll('#filterTypeRow .ftype-chip').forEach(c=>c.classList.toggle('active', c===chip));
-    if (filterNode) filterNode.type = params.filterType;
-  });
 });
 
 $('cutoffSlider').addEventListener('input', e => {
