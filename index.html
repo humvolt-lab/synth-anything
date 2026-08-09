@@ -175,15 +175,17 @@
   .section-title{ display:flex; align-items:center; gap:6px; font-size:9.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--text-dim); margin-bottom:5px; }
   .section-title .swatch{ width:7px; height:7px; border-radius:2px; }
 
-  .row-2col{ display:grid; grid-template-columns:1.3fr 1fr; gap:10px; }
+  .row-3col{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:7px; }
 
   .cycle-btn{
-    width:100%; display:flex; align-items:center; justify-content:center; gap:8px;
-    padding:9px 6px; border-radius:9px; border:1px solid var(--line); background:var(--panel-2);
-    color:var(--text); font-family:'JetBrains Mono', monospace; font-size:11.5px; font-weight:700;
+    width:100%; display:flex; align-items:center; justify-content:center; gap:5px;
+    padding:8px 3px; border-radius:9px; border:1px solid var(--line); background:var(--panel-2);
+    color:var(--text); font-family:'JetBrains Mono', monospace; font-size:10.5px; font-weight:700;
+    white-space:nowrap; overflow:hidden;
   }
   .cycle-btn svg{ display:block; flex-shrink:0; }
-  .cycle-btn .cyc-hint{ color:var(--text-dimmer); font-size:12px; margin-left:2px; }
+  .cycle-btn span:not(.cyc-hint){ overflow:hidden; text-overflow:ellipsis; }
+  .cycle-btn .cyc-hint{ color:var(--text-dimmer); font-size:11px; margin-left:1px; flex-shrink:0; }
   .cycle-btn:active{ transform: translateY(1px); }
 
   .dual-slider-row{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
@@ -256,9 +258,13 @@
 
       <div class="divider"></div>
 
-      <div class="row-2col">
+      <div class="row-3col">
         <div>
-          <div class="section-title"><span class="swatch" style="background:var(--green)"></span>Waveform</div>
+          <div class="section-title"><span class="swatch" style="background:var(--green)"></span>Style</div>
+          <button class="cycle-btn" id="styleBtn"></button>
+        </div>
+        <div>
+          <div class="section-title"><span class="swatch" style="background:var(--green)"></span>Wave</div>
           <button class="cycle-btn" id="waveBtn"></button>
         </div>
         <div>
@@ -731,6 +737,7 @@ let steps = []; // array of {note:{midi,vel}|null, kick, snare, hihat, kOn,sOn,h
 let params = {
   bpm: 100,
   waveform: 'sine',
+  synthStyle: 'percussive',
   filterType: 'lowpass',
   cutoff: 1200,
   resonance: 1,
@@ -857,27 +864,40 @@ function drawStaticEditorScope(samples, sampleRate){
   ctx.stroke();
 }
 
-/* ================= waveform / filter cycle buttons ================= */
+/* ================= style / waveform / filter cycle buttons ================= */
+const SYNTH_STYLES = [
+  { key:'percussive', label:'Pluck' },
+  { key:'flowing', label:'Flowing' }
+];
 const WAVEFORMS = [
   { key:'sine', label:'Sine', path:'M1 8 Q 7 1 13 8 T 25 8' },
-  { key:'triangle', label:'Triangle', path:'M1 8 L7 1 L19 15 L25 8' },
+  { key:'triangle', label:'Tri', path:'M1 8 L7 1 L19 15 L25 8' },
   { key:'sawtooth', label:'Saw', path:'M1 14 L1 2 L13 14 L13 2 L25 14' },
-  { key:'square', label:'Square', path:'M1 2 L1 14 L13 14 L13 2 L25 2 L25 14' }
+  { key:'square', label:'Sqr', path:'M1 2 L1 14 L13 14 L13 2 L25 2 L25 14' }
 ];
 const FILTER_TYPES = [
-  { key:'lowpass', label:'Low-pass' },
-  { key:'highpass', label:'High-pass' },
-  { key:'bandpass', label:'Band-pass' }
+  { key:'lowpass', label:'LP' },
+  { key:'highpass', label:'HP' },
+  { key:'bandpass', label:'BP' }
 ];
 
+function renderStyleBtn(){
+  const s = SYNTH_STYLES.find(x => x.key === params.synthStyle) || SYNTH_STYLES[0];
+  $('styleBtn').innerHTML = '<span>'+s.label+'</span><span class="cyc-hint">&#8635;</span>';
+}
 function renderWaveBtn(){
   const w = WAVEFORMS.find(x => x.key === params.waveform) || WAVEFORMS[0];
-  $('waveBtn').innerHTML = '<svg viewBox="0 0 26 16" width="22" height="13"><path d="'+w.path+'" fill="none" stroke="#6EE7A0" stroke-width="1.6"/></svg><span>'+w.label+'</span><span class="cyc-hint">&#8635;</span>';
+  $('waveBtn').innerHTML = '<svg viewBox="0 0 26 16" width="20" height="12"><path d="'+w.path+'" fill="none" stroke="#6EE7A0" stroke-width="1.6"/></svg><span>'+w.label+'</span><span class="cyc-hint">&#8635;</span>';
 }
 function renderFilterBtn(){
   const f = FILTER_TYPES.find(x => x.key === params.filterType) || FILTER_TYPES[0];
   $('filterBtn').innerHTML = '<span>'+f.label+'</span><span class="cyc-hint">&#8635;</span>';
 }
+$('styleBtn').addEventListener('click', () => {
+  const idx = SYNTH_STYLES.findIndex(x => x.key === params.synthStyle);
+  params.synthStyle = SYNTH_STYLES[(idx+1) % SYNTH_STYLES.length].key;
+  renderStyleBtn();
+});
 $('waveBtn').addEventListener('click', () => {
   const idx = WAVEFORMS.findIndex(x => x.key === params.waveform);
   params.waveform = WAVEFORMS[(idx+1) % WAVEFORMS.length].key;
@@ -895,6 +915,7 @@ function syncUIToParams(){
   $('bpmSlider').value = params.bpm;
   $('bpmVal').textContent = params.bpm;
 
+  renderStyleBtn();
   renderWaveBtn();
   renderFilterBtn();
 
@@ -1017,14 +1038,30 @@ function playHihat(time, velocity, weight){
 }
 function playSynthNote(time, midi, velocity, weight, dur){
   const osc = audioCtx.createOscillator(); osc.type = params.waveform;
-  osc.frequency.value = midiToFreq(midi);
-  const g = audioCtx.createGain();
   const peak = clamp(velocity*weight*0.5, 0.02, 0.9);
-  g.gain.setValueAtTime(0.0001, time);
-  g.gain.exponentialRampToValueAtTime(peak, time+0.012);
-  g.gain.exponentialRampToValueAtTime(0.0001, time + Math.max(0.05, dur*0.92));
-  osc.connect(g); g.connect(synthBus);
-  osc.start(time); osc.stop(time + dur);
+  const g = audioCtx.createGain();
+
+  if (params.synthStyle === 'flowing'){
+    // sustained, legato bass/lead: drop an octave, slower attack, hold
+    // through most of the note, and let it ring well past the step so
+    // notes overlap into a continuous line rather than short plucks.
+    const noteDur = dur * 2.2;
+    osc.frequency.value = midiToFreq(midi - 12);
+    g.gain.setValueAtTime(0.0001, time);
+    g.gain.exponentialRampToValueAtTime(peak, time + 0.05);
+    g.gain.setValueAtTime(peak, time + noteDur*0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + noteDur);
+    osc.connect(g); g.connect(synthBus);
+    osc.start(time); osc.stop(time + noteDur + 0.05);
+  } else {
+    // percussive pluck: quick attack, steady decay across the step
+    osc.frequency.value = midiToFreq(midi);
+    g.gain.setValueAtTime(0.0001, time);
+    g.gain.exponentialRampToValueAtTime(peak, time+0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + Math.max(0.05, dur*0.92));
+    osc.connect(g); g.connect(synthBus);
+    osc.start(time); osc.stop(time + dur);
+  }
 }
 
 /* ---- scheduler ---- */
