@@ -35,23 +35,21 @@
   }
   h1,h2,h3,.display{ font-family:'Unbounded', sans-serif; }
 
-  #app{
+  /* ---------- shared page shell: each top-level page is fully standalone ---------- */
+  .page{
     max-width:520px; margin:0 auto; height:100vh; height:100dvh;
     display:none; flex-direction:column; overflow:hidden;
     padding-top: calc(var(--safe-t) + 8px);
     padding-bottom: calc(var(--safe-b) + 8px);
     position:relative;
   }
-  #app.active{ display:flex; }
+  .page.active{ display:flex; }
 
-  /* ---------- init page: fully standalone, no shared app chrome ---------- */
+  /* ---------- init page: centered, no topbar ---------- */
   #page-init{
-    max-width:520px; margin:0 auto; height:100vh; height:100dvh;
-    display:flex; flex-direction:column; justify-content:center; align-items:center;
-    text-align:center; gap:16px; overflow:hidden;
-    padding: calc(var(--safe-t) + 16px) 24px calc(var(--safe-b) + 16px);
+    justify-content:center; align-items:center; text-align:center; gap:16px;
+    padding-left:24px; padding-right:24px;
   }
-  #page-init.hidden{ display:none; }
 
   /* ---------- shared chrome: rack panel look ---------- */
   .panel{
@@ -77,8 +75,7 @@
   .brand .name{ font-size:13px; letter-spacing:.14em; text-transform:uppercase; color:var(--text-dim); }
   .badge{ font-size:10px; color:var(--text-dimmer); letter-spacing:.08em; }
 
-  .screen{ display:none; flex:1; flex-direction:column; padding: 0 16px; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; }
-  .screen.active{ display:flex; }
+  .page-content{ display:flex; flex:1; flex-direction:column; padding: 0 16px; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; }
 
   .eyebrow{ font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:var(--amber); }
   h1.title{ font-size:30px; line-height:1.08; margin:6px 0 0; font-weight:900; }
@@ -103,8 +100,8 @@
   }
   .mic-err{ display:none; color:var(--red); font-size:12.5px; max-width:320px; line-height:1.5; }
 
-  /* ---------- record screen ---------- */
-  #screen-record{ align-items:center; justify-content:center; gap:22px; text-align:center; }
+  /* ---------- record page ---------- */
+  #recordContent{ align-items:center; justify-content:center; gap:22px; text-align:center; }
   .rec-scope-wrap{ width:100%; max-width:360px; }
   canvas#recScope{ width:100%; height:140px; display:block; }
   .rec-timer{ font-family:'Unbounded'; font-size:15px; color:var(--text-dim); letter-spacing:.06em; }
@@ -134,8 +131,8 @@
   .rec-caption{ font-size:12.5px; color:var(--text-dim); max-width:260px; }
   .rec-caption b{ color:var(--text); }
 
-  /* ---------- processing ---------- */
-  #screen-processing{ align-items:center; justify-content:center; gap:18px; text-align:center; }
+  /* ---------- processing overlay (shown on top of the record page) ---------- */
+  #processingOverlay{ align-items:center; justify-content:center; gap:18px; text-align:center; }
   .spin{
     width:46px; height:46px; border-radius:50%;
     border:3px solid var(--line); border-top-color:var(--cyan);
@@ -144,8 +141,8 @@
   @keyframes spin{ to{ transform: rotate(360deg); } }
   #procMsg{ font-size:13px; color:var(--text-dim); }
 
-  /* ---------- editor screen (single compact panel, fits one screen) ---------- */
-  #screen-editor{ flex:1; display:flex; }
+  /* ---------- performance page (single compact panel, fits one screen) ---------- */
+  #performanceContent{ flex:1; display:flex; }
   .device-panel{ padding:12px 14px 10px; display:flex; flex-direction:column; gap:8px; flex:1; }
   canvas#playScope{ width:100%; height:38px; display:block; }
 
@@ -206,8 +203,8 @@
 </head>
 <body>
 
-<!-- ============ INIT PAGE (separate, standalone) ============ -->
-<div id="page-init">
+<!-- ============ INIT PAGE ============ -->
+<div class="page active" id="page-init">
   <div class="eyebrow">tape in &rarr; synth out</div>
   <h1 class="title">Say something.<br>Get a <span class="accent">loop</span> back.</h1>
   <p class="lede">Record up to 8 seconds. Resample turns it into an editable synth &amp; drum loop.</p>
@@ -215,16 +212,13 @@
   <div class="mic-err" id="micErr"></div>
 </div>
 
-<!-- ============ MAIN APP (record / analyze / edit) ============ -->
-<div id="app">
-
+<!-- ============ RECORDING PAGE ============ -->
+<div class="page" id="page-record">
   <div class="topbar">
     <div class="brand"><span class="dot"></span><span class="name">Resample</span></div>
-    <span class="badge" id="topBadge">REC</span>
+    <span class="badge">REC</span>
   </div>
-
-  <!-- ============ RECORD SCREEN ============ -->
-  <div class="screen active" id="screen-record">
+  <div class="page-content" id="recordContent">
     <div class="rec-scope-wrap panel">
       <canvas id="recScope"></canvas>
     </div>
@@ -235,15 +229,19 @@
     </div>
     <div class="rec-caption" id="recCaption">Tap the button and make some noise &mdash; hum, tap a beat, play an instrument. Tap again to stop early, or it'll cut at <b>8s</b>.</div>
   </div>
-
-  <!-- ============ PROCESSING SCREEN ============ -->
-  <div class="screen" id="screen-processing">
+  <div class="page-content processing-overlay" id="processingOverlay" style="display:none;">
     <div class="spin"></div>
     <div id="procMsg">Listening back&hellip;</div>
   </div>
+</div>
 
-  <!-- ============ EDITOR SCREEN ============ -->
-  <div class="screen" id="screen-editor">
+<!-- ============ PERFORMANCE PAGE ============ -->
+<div class="page" id="page-performance">
+  <div class="topbar">
+    <div class="brand"><span class="dot"></span><span class="name">Resample</span></div>
+    <span class="badge">PERFORM</span>
+  </div>
+  <div class="page-content" id="performanceContent">
     <div class="device-panel panel">
 
       <canvas id="playScope"></canvas>
@@ -319,7 +317,6 @@
       <button class="btn btn-ghost" id="regenBtn">Re&#8209;analyze recording</button>
     </div>
   </div>
-
 </div>
 
 <script>
@@ -332,18 +329,15 @@ function midiToFreq(m){ return 440 * Math.pow(2,(m-69)/12); }
 function freqToMidi(f){ return 69 + 12*Math.log2(f/440); }
 function $(id){ return document.getElementById(id); }
 
-/* ================= screen management ================= */
-const screens = ['screen-record','screen-processing','screen-editor'];
-function showScreen(id){
-  screens.forEach(s => $(s).classList.toggle('active', s===id));
-  $('topBadge').textContent = ({
-    'screen-record':'REC','screen-processing':'ANALYZE','screen-editor':'EDIT'
-  })[id] || '';
+/* ================= page management ================= */
+const pages = ['page-init','page-record','page-performance'];
+function showPage(id){
+  pages.forEach(p => $(p).classList.toggle('active', p===id));
+  if (id === 'page-record' && !recScopeRAF) startRecScopeLoop();
 }
-
-function enterApp(){
-  $('page-init').classList.add('hidden');
-  $('app').classList.add('active');
+function showProcessing(isProcessing){
+  $('recordContent').style.display = isProcessing ? 'none' : 'flex';
+  $('processingOverlay').style.display = isProcessing ? 'flex' : 'none';
 }
 
 /* ================= audio context / mic ================= */
@@ -368,8 +362,7 @@ async function enableMic(){
     analyserNode = audioCtx.createAnalyser();
     analyserNode.fftSize = 1024;
     sourceNode.connect(analyserNode);
-    enterApp();
-    showScreen('screen-record');
+    showPage('page-record');
   }catch(e){
     btn.textContent = '\ud83c\udfa4\u00a0 Enable microphone';
     err.style.display = 'block';
@@ -439,7 +432,7 @@ function stopRecording(){
   }
 
   const normalized = normalizeSamples(samples);
-  showScreen('screen-processing');
+  showProcessing(true);
   setTimeout(() => runAnalysis(normalized, recordedSampleRate), 60);
 }
 
@@ -461,7 +454,8 @@ $('recBtn').addEventListener('click', function(){
 });
 $('reRecordBtn').addEventListener('click', function(){
   stopPlayback();
-  showScreen('screen-record');
+  showProcessing(false);
+  showPage('page-record');
   $('recTime').textContent = '0.0';
   drawRecProgress(0);
   $('recCaption').textContent = "Tap the button and make some noise \u2014 hum, tap a beat, play an instrument. Tap again to stop early, or it'll cut at 8s.";
@@ -488,7 +482,6 @@ function setupCanvas(canvas){
   return { ctx, w: rect.width, h: rect.height };
 }
 
-let idleScopeRAF = null; // reserved (unused now that init screen has no hero scope)
 
 let recScopeRAF = null;
 function startRecScopeLoop(){
@@ -514,16 +507,6 @@ function startRecScopeLoop(){
   }
   draw();
 }
-
-/* switch idle->rec scope when entering record screen */
-const origShowScreen = showScreen;
-showScreen = function(id){
-  origShowScreen(id);
-  if (id === 'screen-record'){
-    if (idleScopeRAF) cancelAnimationFrame(idleScopeRAF);
-    if (!recScopeRAF) startRecScopeLoop();
-  }
-};
 
 /* ================= ANALYSIS ================= */
 const RES = 64; // fixed internal analysis resolution, downsampled to step count later
@@ -813,11 +796,12 @@ function runAnalysis(samples, sampleRate){
       stepCount = 16;
       steps = buildStepsFromAnalysis(lastAnalysis, stepCount);
       syncUIToParams();
-      showScreen('screen-editor');
+      showProcessing(false);
+      showPage('page-performance');
       drawStaticEditorScope(samples, sampleRate);
     }catch(e){
       $('procMsg').textContent = 'Analysis hit a snag \u2014 try recording again.';
-      setTimeout(() => showScreen('screen-record'), 1400);
+      setTimeout(() => { showProcessing(false); showPage('page-record'); }, 1400);
     }
   }, 50);
 }
@@ -1080,7 +1064,7 @@ function drawPlayScopeTick(stepIdx){
 }
 
 window.addEventListener('resize', () => {
-  if ($('screen-editor').classList.contains('active') && lastSamplesForRedraw){
+  if ($('page-performance').classList.contains('active') && lastSamplesForRedraw){
     drawStaticEditorScope(lastSamplesForRedraw, lastSampleRateForRedraw);
   }
 });
