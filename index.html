@@ -128,6 +128,7 @@
   #recBtn.recording{ border-radius:22px; width:70px; height:70px; }
   #recBtn.recording::after{ border-radius:5px; width:26px; height:26px; background:#1a0505; }
   #recBtn:active{ transform: translateY(4px); }
+  #recBtn:disabled{ opacity:.4; }
   .rec-caption{ font-size:12.5px; color:var(--text-dim); max-width:260px; }
   .rec-caption b{ color:var(--text); }
 
@@ -344,19 +345,40 @@ let processorNode = null;
 let recordedChunks = [];
 let recordedSampleRate = 44100;
 
+async function acquireMic(){
+  micStream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:true } });
+  if (!audioCtx){
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    recordedSampleRate = audioCtx.sampleRate;
+  }
+  sourceNode = audioCtx.createMediaStreamSource(micStream);
+  analyserNode = audioCtx.createAnalyser();
+  analyserNode.fftSize = 1024;
+  sourceNode.connect(analyserNode);
+}
+
+// Stops the actual mic tracks (not just disconnecting nodes). On iOS Safari,
+// simply holding a live getUserMedia stream keeps the audio session pinned
+// in a recording-capable mode for as long as the page is open, which blocks
+// or downgrades Bluetooth output the whole time. Releasing the hardware the
+// moment we're done recording lets Bluetooth playback work normally again
+// while you're editing/performing the loop.
+function releaseMic(){
+  if (micStream){
+    micStream.getTracks().forEach(t => { try{ t.stop(); }catch(e){} });
+  }
+  micStream = null;
+  if (sourceNode){ try{ sourceNode.disconnect(); }catch(e){} }
+  sourceNode = null;
+}
+
 async function enableMic(){
   const btn = $('enableMicBtn');
   const err = $('micErr');
   err.style.display = 'none';
   btn.textContent = 'Requesting access\u2026';
   try{
-    micStream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:true } });
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    recordedSampleRate = audioCtx.sampleRate;
-    sourceNode = audioCtx.createMediaStreamSource(micStream);
-    analyserNode = audioCtx.createAnalyser();
-    analyserNode.fftSize = 1024;
-    sourceNode.connect(analyserNode);
+    await acquireMic();
     showPage('page-record');
   }catch(e){
     btn.textContent = '\ud83c\udfa4\u00a0 Enable microphone';
@@ -379,7 +401,7 @@ let recordStartTime = 0;
 let recordTimerRAF = null;
 
 function startRecording(){
-  if (!audioCtx || isRecording) return;
+  if (!audioCtx || !sourceNode || isRecording) return;
   if (audioCtx.state === 'suspended') audioCtx.resume();
   recordedChunks = [];
   isRecording = true;
@@ -426,6 +448,10 @@ function stopRecording(){
     return;
   }
 
+  // We have the audio we need — release the mic right away so Bluetooth
+  // output isn't held hostage for the rest of the session.
+  releaseMic();
+
   const normalized = normalizeSamples(samples);
   showProcessing(true);
   setTimeout(() => runAnalysis(normalized, recordedSampleRate), 60);
@@ -447,13 +473,21 @@ function tickRecordTimer(){
 $('recBtn').addEventListener('click', function(){
   if (isRecording) stopRecording(); else startRecording();
 });
-$('reRecordBtn').addEventListener('click', function(){
+$('reRecordBtn').addEventListener('click', async function(){
   stopPlayback();
   showProcessing(false);
   showPage('page-record');
   $('recTime').textContent = '0.0';
   drawRecProgress(0);
-  $('recCaption').textContent = "Tap the button and make some noise \u2014 hum, tap a beat, play an instrument. Tap again to stop early, or it'll cut at 8s.";
+  $('recBtn').disabled = true;
+  $('recCaption').textContent = 'Reconnecting microphone\u2026';
+  try{
+    await acquireMic();
+    $('recBtn').disabled = false;
+    $('recCaption').textContent = "Tap the button and make some noise \u2014 hum, tap a beat, play an instrument. Tap again to stop early, or it'll cut at 8s.";
+  }catch(e){
+    $('recCaption').textContent = 'Could not reconnect the microphone. Check your browser\u2019s permission settings and try again.';
+  }
 });
 
 /* ---- record ring progress ---- */
@@ -1070,7 +1104,7 @@ function scheduleMonoNote(idx, time){
   const prevSt = steps[prevIdx];
   const wasRinging = !!(prevSt && prevSt.nOn && prevSt.note);
   const stepDur = secondsPerStep();
-  const glideTime = Math.min(stepDur*0.35, 0.09);
+  const glideTime = Math.min(stepDur*0.08, 0.02);
 
   if (st.nOn && st.note){
     ensureMonoVoice();
