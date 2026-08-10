@@ -197,7 +197,6 @@
   .weight-item .name{ display:flex; align-items:center; gap:6px; font-size:10.5px; color:var(--text-dim); margin-bottom:1px; }
   .weight-item .name .swatch{ width:7px; height:7px; border-radius:2px; }
 
-  #regenBtn{ width:100%; padding:9px 0; font-size:10.5px; margin-top:2px; }
 
   ::-webkit-scrollbar{ display:none; }
 </style>
@@ -310,7 +309,7 @@
         <input type="range" id="sensSlider" min="5" max="95" value="35" style="--track-color: var(--magenta);">
       </div>
 
-      <button class="btn btn-ghost" id="regenBtn">Re&#8209;analyze recording</button>
+
     </div>
   </div>
 </div>
@@ -897,11 +896,13 @@ $('styleBtn').addEventListener('click', () => {
   const idx = SYNTH_STYLES.findIndex(x => x.key === params.synthStyle);
   params.synthStyle = SYNTH_STYLES[(idx+1) % SYNTH_STYLES.length].key;
   renderStyleBtn();
+  if (params.synthStyle !== 'flowing') cleanupMonoVoice();
 });
 $('waveBtn').addEventListener('click', () => {
   const idx = WAVEFORMS.findIndex(x => x.key === params.waveform);
   params.waveform = WAVEFORMS[(idx+1) % WAVEFORMS.length].key;
   renderWaveBtn();
+  if (monoOsc) monoOsc.type = params.waveform;
 });
 $('filterBtn').addEventListener('click', () => {
   const idx = FILTER_TYPES.findIndex(x => x.key === params.filterType);
@@ -964,11 +965,6 @@ $('sensSlider').addEventListener('input', e => {
   if (lastAnalysis){
     steps = buildStepsFromAnalysis(lastAnalysis, stepCount);
   }
-});
-
-$('regenBtn').addEventListener('click', () => {
-  if (!lastAnalysis) return;
-  steps = buildStepsFromAnalysis(lastAnalysis, stepCount);
 });
 
 /* ================= synth engine ================= */
@@ -1037,30 +1033,65 @@ function playHihat(time, velocity, weight){
   noise.start(time); noise.stop(time+0.06);
 }
 function playSynthNote(time, midi, velocity, weight, dur){
+  // percussive pluck: quick attack, steady decay across the step
   const osc = audioCtx.createOscillator(); osc.type = params.waveform;
+  osc.frequency.value = midiToFreq(midi);
   const peak = clamp(velocity*weight*0.5, 0.02, 0.9);
   const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.0001, time);
+  g.gain.exponentialRampToValueAtTime(peak, time+0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, time + Math.max(0.05, dur*0.92));
+  osc.connect(g); g.connect(synthBus);
+  osc.start(time); osc.stop(time + dur);
+}
 
-  if (params.synthStyle === 'flowing'){
-    // sustained, legato bass/lead: drop an octave, slower attack, hold
-    // through most of the note, and let it ring well past the step so
-    // notes overlap into a continuous line rather than short plucks.
-    const noteDur = dur * 2.2;
-    osc.frequency.value = midiToFreq(midi - 12);
-    g.gain.setValueAtTime(0.0001, time);
-    g.gain.exponentialRampToValueAtTime(peak, time + 0.05);
-    g.gain.setValueAtTime(peak, time + noteDur*0.6);
-    g.gain.exponentialRampToValueAtTime(0.0001, time + noteDur);
-    osc.connect(g); g.connect(synthBus);
-    osc.start(time); osc.stop(time + noteDur + 0.05);
-  } else {
-    // percussive pluck: quick attack, steady decay across the step
-    osc.frequency.value = midiToFreq(midi);
-    g.gain.setValueAtTime(0.0001, time);
-    g.gain.exponentialRampToValueAtTime(peak, time+0.012);
-    g.gain.exponentialRampToValueAtTime(0.0001, time + Math.max(0.05, dur*0.92));
-    osc.connect(g); g.connect(synthBus);
-    osc.start(time); osc.stop(time + dur);
+/* ---- mono "flowing" bass/lead voice: a single persistent oscillator so
+   only one note ever sounds at a time, gliding between pitches instead
+   of stacking overlapping tones ---- */
+let monoOsc = null, monoGain = null;
+function ensureMonoVoice(){
+  if (monoOsc) return;
+  monoOsc = audioCtx.createOscillator();
+  monoOsc.type = params.waveform;
+  monoGain = audioCtx.createGain();
+  monoGain.gain.value = 0.0001;
+  monoOsc.connect(monoGain);
+  monoGain.connect(synthBus);
+  monoOsc.start();
+}
+function cleanupMonoVoice(){
+  if (monoOsc){ try{ monoOsc.stop(); }catch(e){} try{ monoOsc.disconnect(); }catch(e){} }
+  if (monoGain){ try{ monoGain.disconnect(); }catch(e){} }
+  monoOsc = null; monoGain = null;
+}
+function scheduleMonoNote(idx, time){
+  const st = steps[idx];
+  const prevIdx = (idx - 1 + stepCount) % stepCount;
+  const prevSt = steps[prevIdx];
+  const wasRinging = !!(prevSt && prevSt.nOn && prevSt.note);
+  const stepDur = secondsPerStep();
+  const glideTime = Math.min(stepDur*0.35, 0.09);
+
+  if (st.nOn && st.note){
+    ensureMonoVoice();
+    const freq = midiToFreq(st.note.midi - 12);
+    const peak = clamp(Math.max(st.note.vel,0.55) * params.wSynth * 0.55, 0.02, 0.9);
+    monoGain.gain.cancelScheduledValues(time);
+    monoOsc.frequency.cancelScheduledValues(time);
+    if (wasRinging){
+      // legato: glide from the previous pitch straight into this one
+      monoOsc.frequency.exponentialRampToValueAtTime(freq, time+glideTime);
+      monoGain.gain.setTargetAtTime(peak, time, 0.02);
+    } else {
+      // fresh attack out of silence
+      monoOsc.frequency.setValueAtTime(freq, time);
+      monoGain.gain.setValueAtTime(0.0001, time);
+      monoGain.gain.exponentialRampToValueAtTime(peak, time+0.04);
+    }
+  } else if (wasRinging && monoGain){
+    // this step is a rest right after a ringing note: let it go
+    monoGain.gain.cancelScheduledValues(time);
+    monoGain.gain.setTargetAtTime(0.0001, time, 0.06);
   }
 }
 
@@ -1077,7 +1108,11 @@ function secondsPerStep(){ return (240/params.bpm) / stepCount; }
 function scheduleStep(idx, time){
   const st = steps[idx];
   if (!st) return;
-  if (st.nOn && st.note) playSynthNote(time, st.note.midi, Math.max(st.note.vel, 0.55), params.wSynth, secondsPerStep()*1.6);
+  if (params.synthStyle === 'flowing'){
+    scheduleMonoNote(idx, time);
+  } else if (st.nOn && st.note){
+    playSynthNote(time, st.note.midi, Math.max(st.note.vel, 0.55), params.wSynth, secondsPerStep()*1.6);
+  }
   if (st.kOn) playKick(time, Math.max(st.kick,0.6), params.wKick);
   if (st.sOn) playSnare(time, Math.max(st.snare,0.6), params.wSnare);
   if (st.hOn) playHihat(time, Math.max(st.hihat,0.6), params.wHihat);
@@ -1109,6 +1144,7 @@ function stopPlayback(){
   if (schedulerTimer) clearInterval(schedulerTimer);
   $('playBtn').innerHTML = '&#9654;';
   if (playheadRAF) cancelAnimationFrame(playheadRAF);
+  cleanupMonoVoice();
   if (lastSamplesForRedraw) drawStaticEditorScope(lastSamplesForRedraw, lastSampleRateForRedraw);
 }
 $('playBtn').addEventListener('click', () => { isPlaying ? stopPlayback() : startPlayback(); });
