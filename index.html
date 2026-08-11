@@ -66,16 +66,7 @@
   .screw.tl{ top:10px; left:10px; } .screw.tr{ top:10px; right:10px; }
   .screw.bl{ bottom:10px; left:10px; } .screw.br{ bottom:10px; right:10px; }
 
-  .topbar{
-    display:flex; align-items:center; justify-content:space-between;
-    padding: 4px 20px 10px; flex-shrink:0;
-  }
-  .brand{ display:flex; align-items:center; gap:9px; }
-  .brand .dot{ width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green); }
-  .brand .name{ font-size:13px; letter-spacing:.14em; text-transform:uppercase; color:var(--text-dim); }
-  .badge{ font-size:10px; color:var(--text-dimmer); letter-spacing:.08em; }
-
-  .page-content{ display:flex; flex:1; flex-direction:column; padding: 0 16px; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+  .page-content{ display:flex; flex:1; flex-direction:column; padding: 6px 16px 0; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; }
 
   .eyebrow{ font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:var(--amber); }
   h1.title{ font-size:30px; line-height:1.08; margin:6px 0 0; font-weight:900; }
@@ -216,10 +207,6 @@
 
 <!-- ============ RECORDING PAGE ============ -->
 <div class="page" id="page-record">
-  <div class="topbar">
-    <div class="brand"><span class="dot"></span><span class="name">Resample</span></div>
-    <span class="badge">REC</span>
-  </div>
   <div class="page-content" id="recordContent">
     <div class="rec-scope-wrap panel">
       <canvas id="recScope"></canvas>
@@ -239,10 +226,6 @@
 
 <!-- ============ PERFORMANCE PAGE ============ -->
 <div class="page" id="page-performance">
-  <div class="topbar">
-    <div class="brand"><span class="dot"></span><span class="name">Resample</span></div>
-    <span class="badge">PERFORM</span>
-  </div>
   <div class="page-content" id="performanceContent">
     <div class="device-panel panel">
 
