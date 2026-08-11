@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-<title>Resample &mdash; hear it, resynth it</title>
+<title>Synth Anything &mdash; audio in synth out</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
@@ -198,10 +198,9 @@
 
 <!-- ============ INIT PAGE ============ -->
 <div class="page active" id="page-init">
-  <div class="eyebrow">tape in &rarr; synth out</div>
-  <h1 class="title">Say something.<br>Get a <span class="accent">loop</span> back.</h1>
-  <p class="lede">Record up to 8 seconds. Resample turns it into an editable synth &amp; drum loop.</p>
-  <button class="btn btn-primary" id="enableMicBtn">&#127908;&nbsp; Enable microphone</button>
+  <h1 class="title">SYNTH ANYTHING</h1>
+  <p class="lede">audio in &mdash; synth out</p>
+  <button class="btn btn-primary" id="enableMicBtn">Enable microphone</button>
   <div class="mic-err" id="micErr"></div>
 </div>
 
@@ -362,7 +361,7 @@ async function enableMic(){
     await acquireMic();
     showPage('page-record');
   }catch(e){
-    btn.textContent = '\ud83c\udfa4\u00a0 Enable microphone';
+    btn.textContent = 'Enable microphone';
     err.style.display = 'block';
     if (e && (e.name==='NotAllowedError' || e.name==='SecurityError')){
       err.textContent = "Microphone access was blocked. Check your browser's site settings and allow microphone access, then try again.";
@@ -1085,7 +1084,7 @@ function scheduleMonoNote(idx, time){
   const prevSt = steps[prevIdx];
   const wasRinging = !!(prevSt && prevSt.nOn && prevSt.note);
   const stepDur = secondsPerStep();
-  const glideTime = Math.min(stepDur*0.08, 0.02);
+  const glideTime = Math.min(stepDur*0.02, 0.004);
 
   if (st.nOn && st.note){
     ensureMonoVoice();
