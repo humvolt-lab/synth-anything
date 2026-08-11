@@ -144,7 +144,7 @@
 
   /* ---------- performance page (single compact panel, fits one screen) ---------- */
   #performanceContent{ flex:1; display:flex; }
-  .device-panel{ padding:11px 14px 9px; display:flex; flex-direction:column; gap:6px; flex:1; }
+  .device-panel{ padding:10px 14px 8px; display:flex; flex-direction:column; gap:5px; flex:1; }
   canvas#playScope{ width:100%; height:38px; display:block; }
 
   .divider{ height:1px; background:var(--line); margin:1px 0; }
@@ -287,7 +287,6 @@
 
       <div class="divider"></div>
 
-      <div class="section-title"><span class="swatch" style="background:var(--magenta)"></span>Element weight</div>
       <div class="weights-grid">
         <div class="weight-item">
           <div class="name"><span class="swatch" style="background:var(--green)"></span>Synth</div>
@@ -310,8 +309,6 @@
         <div class="slider-row"><span>Sensitivity &mdash; lower includes more</span><span class="v"><span id="sensVal">35</span>%</span></div>
         <input type="range" id="sensSlider" min="5" max="95" value="35" style="--track-color: var(--magenta);">
       </div>
-
-
     </div>
   </div>
 </div>
