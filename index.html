@@ -37,7 +37,7 @@
 
   /* ---------- shared page shell: each top-level page is fully standalone ---------- */
   .page{
-    max-width:520px; margin:0 auto; height:100vh; height:100dvh;
+    max-width:640px; margin:0 auto; height:100vh; height:100dvh;
     display:none; flex-direction:column; overflow:hidden;
     padding-top: calc(var(--safe-t) + 8px);
     padding-bottom: calc(var(--safe-b) + 8px);
@@ -240,6 +240,11 @@
       </div>
 
       <div class="divider"></div>
+
+      <div class="slider-block">
+        <div class="slider-row"><span>Original &harr; Synth</span><span class="v"><span id="mixVal">100</span>%</span></div>
+        <input type="range" id="mixSlider" min="0" max="100" value="100" style="--track-color: var(--green);">
+      </div>
 
       <div class="row-3col">
         <div>
@@ -755,7 +760,8 @@ let params = {
   cutoff: 1200,
   resonance: 1,
   wSynth: 0.8, wKick: 0.9, wSnare: 0.75, wHihat: 0.65,
-  sensitivity: 0.35
+  sensitivity: 0.35,
+  mix: 1.0 // 1 = full synth, 0 = full original recording; drums are unaffected
 };
 
 function buildStepsFromAnalysis(analysis, count){
@@ -832,6 +838,14 @@ function completeDrumPattern(arr, count){
 }
 
 /* ================= run full analysis -> editor ================= */
+let recordedBuffer = null;
+function buildRecordedBuffer(samples, sampleRate){
+  if (!audioCtx) return null;
+  const buf = audioCtx.createBuffer(1, samples.length, sampleRate);
+  buf.copyToChannel(samples, 0);
+  return buf;
+}
+
 function runAnalysis(samples, sampleRate){
   $('procMsg').textContent = 'Finding pitch, beat & tone\u2026';
   setTimeout(() => {
@@ -842,6 +856,7 @@ function runAnalysis(samples, sampleRate){
       params.cutoff = lastAnalysis.suggestedCutoff;
       stepCount = 16;
       steps = buildStepsFromAnalysis(lastAnalysis, stepCount);
+      recordedBuffer = buildRecordedBuffer(samples, sampleRate);
       syncUIToParams();
       showProcessing(false);
       showPage('page-performance');
@@ -930,6 +945,9 @@ function syncUIToParams(){
   $('bpmSlider').value = params.bpm;
   $('bpmVal').textContent = params.bpm;
 
+  $('mixSlider').value = Math.round(params.mix*100);
+  $('mixVal').textContent = Math.round(params.mix*100);
+
   renderStyleBtn();
   renderWaveBtn();
   renderFilterBtn();
@@ -952,6 +970,12 @@ function syncUIToParams(){
 $('bpmSlider').addEventListener('input', e => {
   params.bpm = parseInt(e.target.value,10);
   $('bpmVal').textContent = params.bpm;
+});
+
+$('mixSlider').addEventListener('input', e => {
+  params.mix = parseInt(e.target.value,10)/100;
+  $('mixVal').textContent = Math.round(params.mix*100);
+  applyMixGains();
 });
 
 $('cutoffSlider').addEventListener('input', e => {
@@ -982,15 +1006,17 @@ $('sensSlider').addEventListener('input', e => {
 });
 
 /* ================= synth engine ================= */
-let synthBus = null, drumBus = null, filterNode = null, compressor = null, noiseBuffer = null;
+let synthBus = null, drumBus = null, origBus = null, filterNode = null, compressor = null, noiseBuffer = null;
 function ensurePlaybackGraph(){
   if (synthBus) return;
-  // Synth voice runs through the adjustable filter; drums bypass it entirely
-  // so filter changes only reshape the synth, never the beat.
+  // Synth voice runs through the adjustable filter; drums and the original
+  // recording both bypass it, so filter changes only reshape the synth.
   synthBus = audioCtx.createGain();
-  synthBus.gain.value = 1;
+  synthBus.gain.value = params.mix;
   drumBus = audioCtx.createGain();
   drumBus.gain.value = 1;
+  origBus = audioCtx.createGain();
+  origBus.gain.value = 1 - params.mix;
 
   filterNode = audioCtx.createBiquadFilter();
   filterNode.type = params.filterType;
@@ -1002,11 +1028,21 @@ function ensurePlaybackGraph(){
   synthBus.connect(filterNode);
   filterNode.connect(compressor);
   drumBus.connect(compressor);
+  origBus.connect(compressor);
   compressor.connect(audioCtx.destination);
 
   noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate*1, audioCtx.sampleRate);
   const d = noiseBuffer.getChannelData(0);
   for (let i=0;i<d.length;i++) d[i] = Math.random()*2-1;
+}
+
+function applyMixGains(){
+  if (!synthBus || !origBus || !audioCtx) return;
+  const t = audioCtx.currentTime;
+  synthBus.gain.cancelScheduledValues(t);
+  origBus.gain.cancelScheduledValues(t);
+  synthBus.gain.setTargetAtTime(params.mix, t, 0.02);
+  origBus.gain.setTargetAtTime(1 - params.mix, t, 0.02);
 }
 
 function playKick(time, velocity, weight){
@@ -1141,6 +1177,7 @@ function schedulerTick(){
   }
 }
 
+let origSource = null;
 function startPlayback(){
   if (isPlaying || !audioCtx) return;
   ensurePlaybackGraph();
@@ -1152,6 +1189,14 @@ function startPlayback(){
   schedulerTimer = setInterval(schedulerTick, INTERVAL);
   $('playBtn').innerHTML = '&#9632;';
   startPlayheadLoop();
+
+  if (recordedBuffer){
+    origSource = audioCtx.createBufferSource();
+    origSource.buffer = recordedBuffer;
+    origSource.loop = true;
+    origSource.connect(origBus);
+    origSource.start(nextNoteTime);
+  }
 }
 function stopPlayback(){
   isPlaying = false;
@@ -1159,6 +1204,7 @@ function stopPlayback(){
   $('playBtn').innerHTML = '&#9654;';
   if (playheadRAF) cancelAnimationFrame(playheadRAF);
   cleanupMonoVoice();
+  if (origSource){ try{ origSource.stop(); }catch(e){} try{ origSource.disconnect(); }catch(e){} origSource = null; }
   if (lastSamplesForRedraw) drawStaticEditorScope(lastSamplesForRedraw, lastSampleRateForRedraw);
 }
 $('playBtn').addEventListener('click', () => { isPlaying ? stopPlayback() : startPlayback(); });
