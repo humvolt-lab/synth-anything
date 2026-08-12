@@ -860,66 +860,68 @@ function runAnalysis(samples, sampleRate){
 }
 
 /* Fit the original recording to the current bar length (240/bpm seconds)
-   WITHOUT time-stretching. Instead, chop the audio at the same onset
-   points used for the rhythm/drum analysis, then:
-     - if the bar is LONGER than the recording (slowing down), repeat
-       ("sample & hold") each chopped chunk in place to fill its share
-       of the extra time, rather than smearing it with a stretch algorithm.
-     - if the bar is SHORTER (speeding up), keep the front of each chunk
-       (which starts right on the onset/transient) and truncate the tail,
-       so the rhythmic hit points stay locked to the beat instead of the
-       whole clip getting compressed/pitched.
-   This keeps pitch and timbre untouched either way. */
-function chopFitAudioToBar(samples, sampleRate, onsetTimes, targetDuration){
+   WITHOUT time-stretching. The bar is always divided into 32 equal slots
+   (a fixed 32nd-note grid, regardless of tempo). First, the SOURCE audio
+   is chopped along its own native 32nd-note grid (based on the tempo we
+   originally detected from it), and only the grains that actually contain
+   a detected onset -- the ones "driving the rhythm" -- are kept as a pool.
+   Then every one of the 32 target slots is filled by sample-and-hold from
+   that pool, cycling through it in order and wrapping back to the start
+   once it runs out. A slot shorter than its grain just truncates the
+   grain; a slot longer just repeats it. Because there are always exactly
+   32 slots no matter the tempo, speeding up and slowing down both fall
+   out of the same single procedure instead of separate stretch/truncate
+   branches, and the result always has a steady 32nd-note pulse. */
+function chopFitAudioToBar(samples, sampleRate, onsetTimes, targetDuration, nativeBpm){
+  const SLOTS = 32;
   const totalSamples = samples.length;
-  const targetSamples = Math.max(1, Math.round(targetDuration*sampleRate));
-  const ratio = targetSamples / totalSamples;
+  const targetSamples = Math.max(SLOTS, Math.round(targetDuration*sampleRate));
 
-  // chop points = detected onsets (the same rhythmic reference points used
-  // for the drum/pitch interpretation), deduped and merged if too close
-  let times = (onsetTimes||[]).filter(t => t > 0.03 && t < (totalSamples/sampleRate) - 0.03).sort((a,b)=>a-b);
-  const merged = [];
-  times.forEach(t => { if (!merged.length || t - merged[merged.length-1] > 0.06) merged.push(t); });
+  // chop the SOURCE along its own native 32nd-note grid
+  const sourceSliceSamples = Math.max(1, Math.round(((240/nativeBpm)/SLOTS) * sampleRate));
+  const numSourceSlices = Math.max(1, Math.floor(totalSamples/sourceSliceSamples));
 
-  let boundSamples = [0, ...merged.map(t => Math.round(t*sampleRate)), totalSamples];
-  boundSamples = Array.from(new Set(boundSamples)).sort((a,b)=>a-b);
-
-  // no usable rhythmic reference points -> fall back to evenly-spaced chops
-  if (boundSamples.length < 3){
-    const n = 8;
-    boundSamples = [];
-    for (let i=0;i<=n;i++) boundSamples.push(Math.round(i*totalSamples/n));
+  // keep only the source grains that actually contain a detected onset --
+  // the ones driving the rhythm
+  let pool = [];
+  for (let i=0;i<numSourceSlices;i++){
+    const start = i*sourceSliceSamples;
+    const end = Math.min(totalSamples, start+sourceSliceSamples);
+    const winStartT = start/sampleRate, winEndT = end/sampleRate;
+    const active = (onsetTimes||[]).some(t => t>=winStartT && t<winEndT);
+    if (active) pool.push({ start, end });
+  }
+  if (!pool.length){
+    // no clear onsets detected -- fall back to using every grain
+    for (let i=0;i<numSourceSlices;i++){
+      const start = i*sourceSliceSamples;
+      pool.push({ start, end: Math.min(totalSamples, start+sourceSliceSamples) });
+    }
   }
 
-  const segments = [];
-  for (let i=0;i<boundSamples.length-1;i++) segments.push({ start: boundSamples[i], end: boundSamples[i+1] });
-
+  const targetSliceSamples = Math.max(1, Math.round(targetSamples/SLOTS));
   const out = new Float32Array(targetSamples);
-  let outPos = 0;
 
-  segments.forEach((seg, idx) => {
-    const segLen = seg.end - seg.start;
-    if (segLen <= 0) return;
-    const isLast = (idx === segments.length-1);
-    let segTarget = isLast ? (targetSamples - outPos) : Math.round(segLen*ratio);
-    segTarget = clamp(segTarget, 0, targetSamples - outPos);
-    if (segTarget <= 0) return;
+  for (let slot=0; slot<SLOTS; slot++){
+    const outStart = slot*targetSliceSamples;
+    if (outStart >= targetSamples) break;
+    const outLen = Math.min(targetSliceSamples, targetSamples-outStart);
+    const grain = pool[slot % pool.length];
+    const grainLen = grain.end - grain.start;
+    if (grainLen <= 0) continue;
 
-    if (ratio >= 1){
-      // slowing down: sample-and-hold -- repeat this chunk to fill its target span
-      let written = 0;
-      while (written < segTarget){
-        const chunk = Math.min(segLen, segTarget - written);
-        for (let i=0;i<chunk;i++) out[outPos+written+i] = samples[seg.start+i];
-        written += chunk;
-      }
-    } else {
-      // speeding up: keep the onset-aligned start of the chunk, truncate the rest
-      const chunk = Math.min(segLen, segTarget);
-      for (let i=0;i<chunk;i++) out[outPos+i] = samples[seg.start+i];
+    // sample-and-hold: fill this slot with the grain, repeating it if the
+    // slot is longer, truncating it if the slot is shorter
+    let written = 0;
+    while (written < outLen){
+      const n = Math.min(grainLen, outLen-written);
+      for (let i=0;i<n;i++) out[outStart+written+i] = samples[grain.start+i];
+      written += n;
     }
-    outPos += segTarget;
-  });
+    // tiny fade-in on each retrigger to soften the grain-boundary click
+    const fl = Math.min(Math.round(sampleRate*0.002), outLen);
+    for (let i=0;i<fl;i++) out[outStart+i] *= (i/fl);
+  }
 
   // taper both ends toward silence so the loop wraps without a click
   const edgeFade = Math.min(Math.round(sampleRate*0.006), Math.floor(targetSamples/6));
@@ -935,7 +937,8 @@ function chopFitAudioToBar(samples, sampleRate, onsetTimes, targetDuration){
 function buildFittedRecordedBuffer(){
   if (!audioCtx || !lastSamplesForRedraw || !lastAnalysis) return null;
   const targetDuration = 240/params.bpm; // one bar (4 beats) at the current tempo
-  const fitted = chopFitAudioToBar(lastSamplesForRedraw, lastSampleRateForRedraw, lastAnalysis.onsetTimes, targetDuration);
+  const nativeBpm = clamp(lastAnalysis.bpm || 100, 40, 220);
+  const fitted = chopFitAudioToBar(lastSamplesForRedraw, lastSampleRateForRedraw, lastAnalysis.onsetTimes, targetDuration, nativeBpm);
   const buf = audioCtx.createBuffer(1, fitted.length, lastSampleRateForRedraw);
   buf.copyToChannel(fitted, 0);
   return buf;
