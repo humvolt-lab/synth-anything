@@ -745,7 +745,7 @@ function analyzeAudio(samples, sampleRate){
   else if (zcrAvg > 0.095) suggestedWave = 'square';
   else if (zcrAvg > 0.045) suggestedWave = 'triangle';
 
-  return { bpm, noteSlices, drumSlices, suggestedCutoff, suggestedWave, duration, RES };
+  return { bpm, noteSlices, drumSlices, suggestedCutoff, suggestedWave, duration, RES, onsetTimes: onsets.map(o => o.time) };
 }
 
 /* ================= state ================= */
@@ -838,14 +838,6 @@ function completeDrumPattern(arr, count){
 }
 
 /* ================= run full analysis -> editor ================= */
-let recordedBuffer = null;
-function buildRecordedBuffer(samples, sampleRate){
-  if (!audioCtx) return null;
-  const buf = audioCtx.createBuffer(1, samples.length, sampleRate);
-  buf.copyToChannel(samples, 0);
-  return buf;
-}
-
 function runAnalysis(samples, sampleRate){
   $('procMsg').textContent = 'Finding pitch, beat & tone\u2026';
   setTimeout(() => {
@@ -856,7 +848,6 @@ function runAnalysis(samples, sampleRate){
       params.cutoff = lastAnalysis.suggestedCutoff;
       stepCount = 16;
       steps = buildStepsFromAnalysis(lastAnalysis, stepCount);
-      recordedBuffer = buildRecordedBuffer(samples, sampleRate);
       syncUIToParams();
       showProcessing(false);
       showPage('page-performance');
@@ -866,6 +857,88 @@ function runAnalysis(samples, sampleRate){
       setTimeout(() => { showProcessing(false); showPage('page-record'); }, 1400);
     }
   }, 50);
+}
+
+/* Fit the original recording to the current bar length (240/bpm seconds)
+   WITHOUT time-stretching. Instead, chop the audio at the same onset
+   points used for the rhythm/drum analysis, then:
+     - if the bar is LONGER than the recording (slowing down), repeat
+       ("sample & hold") each chopped chunk in place to fill its share
+       of the extra time, rather than smearing it with a stretch algorithm.
+     - if the bar is SHORTER (speeding up), keep the front of each chunk
+       (which starts right on the onset/transient) and truncate the tail,
+       so the rhythmic hit points stay locked to the beat instead of the
+       whole clip getting compressed/pitched.
+   This keeps pitch and timbre untouched either way. */
+function chopFitAudioToBar(samples, sampleRate, onsetTimes, targetDuration){
+  const totalSamples = samples.length;
+  const targetSamples = Math.max(1, Math.round(targetDuration*sampleRate));
+  const ratio = targetSamples / totalSamples;
+
+  // chop points = detected onsets (the same rhythmic reference points used
+  // for the drum/pitch interpretation), deduped and merged if too close
+  let times = (onsetTimes||[]).filter(t => t > 0.03 && t < (totalSamples/sampleRate) - 0.03).sort((a,b)=>a-b);
+  const merged = [];
+  times.forEach(t => { if (!merged.length || t - merged[merged.length-1] > 0.06) merged.push(t); });
+
+  let boundSamples = [0, ...merged.map(t => Math.round(t*sampleRate)), totalSamples];
+  boundSamples = Array.from(new Set(boundSamples)).sort((a,b)=>a-b);
+
+  // no usable rhythmic reference points -> fall back to evenly-spaced chops
+  if (boundSamples.length < 3){
+    const n = 8;
+    boundSamples = [];
+    for (let i=0;i<=n;i++) boundSamples.push(Math.round(i*totalSamples/n));
+  }
+
+  const segments = [];
+  for (let i=0;i<boundSamples.length-1;i++) segments.push({ start: boundSamples[i], end: boundSamples[i+1] });
+
+  const out = new Float32Array(targetSamples);
+  let outPos = 0;
+
+  segments.forEach((seg, idx) => {
+    const segLen = seg.end - seg.start;
+    if (segLen <= 0) return;
+    const isLast = (idx === segments.length-1);
+    let segTarget = isLast ? (targetSamples - outPos) : Math.round(segLen*ratio);
+    segTarget = clamp(segTarget, 0, targetSamples - outPos);
+    if (segTarget <= 0) return;
+
+    if (ratio >= 1){
+      // slowing down: sample-and-hold -- repeat this chunk to fill its target span
+      let written = 0;
+      while (written < segTarget){
+        const chunk = Math.min(segLen, segTarget - written);
+        for (let i=0;i<chunk;i++) out[outPos+written+i] = samples[seg.start+i];
+        written += chunk;
+      }
+    } else {
+      // speeding up: keep the onset-aligned start of the chunk, truncate the rest
+      const chunk = Math.min(segLen, segTarget);
+      for (let i=0;i<chunk;i++) out[outPos+i] = samples[seg.start+i];
+    }
+    outPos += segTarget;
+  });
+
+  // taper both ends toward silence so the loop wraps without a click
+  const edgeFade = Math.min(Math.round(sampleRate*0.006), Math.floor(targetSamples/6));
+  for (let i=0;i<edgeFade;i++){
+    const g = i/edgeFade;
+    out[i] *= g;
+    out[targetSamples-1-i] *= g;
+  }
+
+  return out;
+}
+
+function buildFittedRecordedBuffer(){
+  if (!audioCtx || !lastSamplesForRedraw || !lastAnalysis) return null;
+  const targetDuration = 240/params.bpm; // one bar (4 beats) at the current tempo
+  const fitted = chopFitAudioToBar(lastSamplesForRedraw, lastSampleRateForRedraw, lastAnalysis.onsetTimes, targetDuration);
+  const buf = audioCtx.createBuffer(1, fitted.length, lastSampleRateForRedraw);
+  buf.copyToChannel(fitted, 0);
+  return buf;
 }
 
 let lastSamplesForRedraw = null, lastSampleRateForRedraw = 44100;
@@ -970,6 +1043,9 @@ function syncUIToParams(){
 $('bpmSlider').addEventListener('input', e => {
   params.bpm = parseInt(e.target.value,10);
   $('bpmVal').textContent = params.bpm;
+});
+$('bpmSlider').addEventListener('change', () => {
+  if (isPlaying) restartOrigSource();
 });
 
 $('mixSlider').addEventListener('input', e => {
@@ -1190,9 +1266,10 @@ function startPlayback(){
   $('playBtn').innerHTML = '&#9632;';
   startPlayheadLoop();
 
-  if (recordedBuffer){
+  const fittedBuffer = buildFittedRecordedBuffer();
+  if (fittedBuffer){
     origSource = audioCtx.createBufferSource();
-    origSource.buffer = recordedBuffer;
+    origSource.buffer = fittedBuffer;
     origSource.loop = true;
     origSource.connect(origBus);
     origSource.start(nextNoteTime);
@@ -1208,6 +1285,19 @@ function stopPlayback(){
   if (lastSamplesForRedraw) drawStaticEditorScope(lastSamplesForRedraw, lastSampleRateForRedraw);
 }
 $('playBtn').addEventListener('click', () => { isPlaying ? stopPlayback() : startPlayback(); });
+
+function restartOrigSource(){
+  if (!audioCtx || !origBus) return;
+  if (origSource){ try{ origSource.stop(); }catch(e){} try{ origSource.disconnect(); }catch(e){} origSource = null; }
+  const fittedBuffer = buildFittedRecordedBuffer();
+  if (fittedBuffer){
+    origSource = audioCtx.createBufferSource();
+    origSource.buffer = fittedBuffer;
+    origSource.loop = true;
+    origSource.connect(origBus);
+    origSource.start(audioCtx.currentTime + 0.02);
+  }
+}
 
 let playheadRAF = null;
 let lastHighlighted = -1;
