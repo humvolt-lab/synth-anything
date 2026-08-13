@@ -136,7 +136,6 @@
   /* ---------- performance page (single compact panel, fits one screen) ---------- */
   #performanceContent{ flex:1; display:flex; }
   .device-panel{ padding:10px 14px 8px; display:flex; flex-direction:column; gap:5px; flex:1; }
-  canvas#playScope{ width:100%; height:38px; display:block; }
 
   .divider{ height:1px; background:var(--line); margin:1px 0; }
 
@@ -189,6 +188,13 @@
   .weights-grid{ display:flex; flex-direction:column; gap:2px; }
   .weight-item .name{ display:flex; align-items:center; gap:6px; font-size:10.5px; color:var(--text-dim); margin-bottom:1px; }
   .weight-item .name .swatch{ width:7px; height:7px; border-radius:2px; }
+  .dice-btn{
+    margin-left:auto; width:22px; height:22px; padding:3px; border-radius:6px;
+    border:1px solid var(--line); background:var(--panel-2); display:flex;
+    align-items:center; justify-content:center; flex-shrink:0; transition:transform .12s;
+  }
+  .dice-btn svg{ width:100%; height:100%; display:block; }
+  .dice-btn:active{ transform: scale(0.82) rotate(18deg); }
 
 
   ::-webkit-scrollbar{ display:none; }
@@ -227,8 +233,6 @@
 <div class="page" id="page-performance">
   <div class="page-content" id="performanceContent">
     <div class="device-panel panel">
-
-      <canvas id="playScope"></canvas>
 
       <div class="transport">
         <button class="btn" id="playBtn">&#9654;</button>
@@ -276,19 +280,19 @@
 
       <div class="weights-grid">
         <div class="weight-item">
-          <div class="name"><span class="swatch" style="background:var(--green)"></span>Synth</div>
+          <div class="name"><span class="swatch" style="background:var(--green)"></span>Synth<button class="dice-btn" data-lane="note" style="color:var(--green)" aria-label="Reinterpret synth"><svg viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="5" cy="4.5" r="1.15" fill="currentColor"/><circle cx="11" cy="4.5" r="1.15" fill="currentColor"/><circle cx="5" cy="8" r="1.15" fill="currentColor"/><circle cx="11" cy="8" r="1.15" fill="currentColor"/><circle cx="5" cy="11.5" r="1.15" fill="currentColor"/><circle cx="11" cy="11.5" r="1.15" fill="currentColor"/></svg></button></div>
           <input type="range" id="wSynth" min="0" max="100" value="80" style="--track-color: var(--green);">
         </div>
         <div class="weight-item">
-          <div class="name"><span class="swatch" style="background:var(--amber)"></span>Kick</div>
+          <div class="name"><span class="swatch" style="background:var(--amber)"></span>Kick<button class="dice-btn" data-lane="kick" style="color:var(--amber)" aria-label="Reinterpret kick"><svg viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="5" cy="4.5" r="1.15" fill="currentColor"/><circle cx="11" cy="4.5" r="1.15" fill="currentColor"/><circle cx="5" cy="8" r="1.15" fill="currentColor"/><circle cx="11" cy="8" r="1.15" fill="currentColor"/><circle cx="5" cy="11.5" r="1.15" fill="currentColor"/><circle cx="11" cy="11.5" r="1.15" fill="currentColor"/></svg></button></div>
           <input type="range" id="wKick" min="0" max="100" value="90" style="--track-color: var(--amber);">
         </div>
         <div class="weight-item">
-          <div class="name"><span class="swatch" style="background:var(--magenta)"></span>Snare</div>
+          <div class="name"><span class="swatch" style="background:var(--magenta)"></span>Snare<button class="dice-btn" data-lane="snare" style="color:var(--magenta)" aria-label="Reinterpret snare"><svg viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="5" cy="4.5" r="1.15" fill="currentColor"/><circle cx="11" cy="4.5" r="1.15" fill="currentColor"/><circle cx="5" cy="8" r="1.15" fill="currentColor"/><circle cx="11" cy="8" r="1.15" fill="currentColor"/><circle cx="5" cy="11.5" r="1.15" fill="currentColor"/><circle cx="11" cy="11.5" r="1.15" fill="currentColor"/></svg></button></div>
           <input type="range" id="wSnare" min="0" max="100" value="75" style="--track-color: var(--magenta);">
         </div>
         <div class="weight-item">
-          <div class="name"><span class="swatch" style="background:var(--cyan)"></span>Hi&#8209;hat</div>
+          <div class="name"><span class="swatch" style="background:var(--cyan)"></span>Hi&#8209;hat<button class="dice-btn" data-lane="hihat" style="color:var(--cyan)" aria-label="Reinterpret hi-hat"><svg viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="5" cy="4.5" r="1.15" fill="currentColor"/><circle cx="11" cy="4.5" r="1.15" fill="currentColor"/><circle cx="5" cy="8" r="1.15" fill="currentColor"/><circle cx="11" cy="8" r="1.15" fill="currentColor"/><circle cx="5" cy="11.5" r="1.15" fill="currentColor"/><circle cx="11" cy="11.5" r="1.15" fill="currentColor"/></svg></button></div>
           <input type="range" id="wHihat" min="0" max="100" value="65" style="--track-color: var(--cyan);">
         </div>
       </div>
@@ -837,6 +841,31 @@ function completeDrumPattern(arr, count){
   }
 }
 
+/* Dice buttons: reinterpret one instrument lane at a time by nudging its
+   current pattern -- flip a handful of steps on/off, and for the synth
+   lane also give some notes a small random pitch shift. This is a "roll
+   again, a little differently" tool, not a fresh analysis, so it stays
+   grounded in the existing pattern rather than replacing it outright. */
+function rerollLane(laneKey){
+  if (!steps || !steps.length) return;
+  const onKey = laneKey === 'note' ? 'nOn' : laneKey === 'kick' ? 'kOn' : laneKey === 'snare' ? 'sOn' : 'hOn';
+  steps.forEach(st => {
+    if (Math.random() < 0.22) st[onKey] = !st[onKey];
+  });
+  if (laneKey === 'note'){
+    const shifts = [-2,-1,1,2];
+    steps.forEach(st => {
+      if (st.nOn && st.note && Math.random() < 0.35){
+        const shift = shifts[Math.floor(Math.random()*shifts.length)];
+        st.note = { midi: st.note.midi + shift, vel: st.note.vel };
+      }
+    });
+  }
+}
+document.querySelectorAll('.dice-btn').forEach(btn => {
+  btn.addEventListener('click', () => rerollLane(btn.dataset.lane));
+});
+
 /* ================= run full analysis -> editor ================= */
 function runAnalysis(samples, sampleRate){
   $('procMsg').textContent = 'Finding pitch, beat & tone\u2026';
@@ -851,7 +880,7 @@ function runAnalysis(samples, sampleRate){
       syncUIToParams();
       showProcessing(false);
       showPage('page-performance');
-      drawStaticEditorScope(samples, sampleRate);
+      storeRecordedSamples(samples, sampleRate);
     }catch(e){
       $('procMsg').textContent = 'Analysis hit a snag \u2014 try recording again.';
       setTimeout(() => { showProcessing(false); showPage('page-record'); }, 1400);
@@ -945,32 +974,14 @@ function buildFittedRecordedBuffer(){
 }
 
 let lastSamplesForRedraw = null, lastSampleRateForRedraw = 44100;
-function drawStaticEditorScope(samples, sampleRate){
+function storeRecordedSamples(samples, sampleRate){
   lastSamplesForRedraw = samples; lastSampleRateForRedraw = sampleRate;
-  const canvas = $('playScope');
-  const {ctx, w, h} = setupCanvas(canvas);
-  ctx.clearRect(0,0,w,h);
-  ctx.strokeStyle = '#6EE7A0';
-  ctx.lineWidth = 1.4;
-  ctx.beginPath();
-  const step = Math.max(1, Math.floor(samples.length / w));
-  for (let x=0; x<w; x++){
-    const idx = x*step;
-    let min=1, max=-1;
-    for (let i=idx; i<Math.min(idx+step, samples.length); i++){
-      if (samples[i]<min) min = samples[i];
-      if (samples[i]>max) max = samples[i];
-    }
-    const y1 = h/2 + min*(h/2-2);
-    const y2 = h/2 + max*(h/2-2);
-    ctx.moveTo(x, y1); ctx.lineTo(x, y2);
-  }
-  ctx.stroke();
 }
 
 /* ================= style / waveform / filter cycle buttons ================= */
 const SYNTH_STYLES = [
   { key:'percussive', label:'Pluck' },
+  { key:'phrased', label:'Phrased' },
   { key:'flowing', label:'Flowing' }
 ];
 const WAVEFORMS = [
@@ -1229,10 +1240,25 @@ let isPlaying = false;
 let nextNoteTime = 0;
 let currentStepIndex = 0;
 let schedulerTimer = null;
-let scheduledMarks = [];
 const LOOKAHEAD = 0.1, INTERVAL = 25;
 
 function secondsPerStep(){ return (240/params.bpm) / stepCount; }
+
+/* "Phrased" style: instead of every note being a uniform marching-16ths
+   pluck, give each step a note length that varies -- some short, some
+   held out over several steps. The variation is derived from a stable
+   hash of the step index and pitch (not re-rolled every playback), so
+   the same phrase repeats consistently bar to bar rather than jittering,
+   while still landing differently across the pattern -- some notes read
+   as quick stabs, others as longer held tones. */
+function phrasedNoteDuration(idx, st){
+  const stepDur = secondsPerStep();
+  const midi = (st.note && st.note.midi) || 0;
+  const seed = Math.abs(Math.sin(idx*12.9898 + midi*78.233)) % 1;
+  const vel = (st.note && st.note.vel) || 0.5;
+  const lengthFactor = 1 + seed*3.2 + vel*2; // roughly 1x to ~6x a step's length
+  return stepDur * lengthFactor;
+}
 
 function scheduleStep(idx, time){
   const st = steps[idx];
@@ -1240,12 +1266,12 @@ function scheduleStep(idx, time){
   if (params.synthStyle === 'flowing'){
     scheduleMonoNote(idx, time);
   } else if (st.nOn && st.note){
-    playSynthNote(time, st.note.midi, Math.max(st.note.vel, 0.55), params.wSynth, secondsPerStep()*1.6);
+    const dur = params.synthStyle === 'phrased' ? phrasedNoteDuration(idx, st) : secondsPerStep()*1.6;
+    playSynthNote(time, st.note.midi, Math.max(st.note.vel, 0.55), params.wSynth, dur);
   }
   if (st.kOn) playKick(time, Math.max(st.kick,0.6), params.wKick);
   if (st.sOn) playSnare(time, Math.max(st.snare,0.6), params.wSnare);
   if (st.hOn) playHihat(time, Math.max(st.hihat,0.6), params.wHihat);
-  scheduledMarks.push({ step: idx, time });
 }
 
 function schedulerTick(){
@@ -1264,10 +1290,8 @@ function startPlayback(){
   isPlaying = true;
   currentStepIndex = 0;
   nextNoteTime = audioCtx.currentTime + 0.05;
-  scheduledMarks = [];
   schedulerTimer = setInterval(schedulerTick, INTERVAL);
   $('playBtn').innerHTML = '&#9632;';
-  startPlayheadLoop();
 
   const fittedBuffer = buildFittedRecordedBuffer();
   if (fittedBuffer){
@@ -1282,10 +1306,8 @@ function stopPlayback(){
   isPlaying = false;
   if (schedulerTimer) clearInterval(schedulerTimer);
   $('playBtn').innerHTML = '&#9654;';
-  if (playheadRAF) cancelAnimationFrame(playheadRAF);
   cleanupMonoVoice();
   if (origSource){ try{ origSource.stop(); }catch(e){} try{ origSource.disconnect(); }catch(e){} origSource = null; }
-  if (lastSamplesForRedraw) drawStaticEditorScope(lastSamplesForRedraw, lastSampleRateForRedraw);
 }
 $('playBtn').addEventListener('click', () => { isPlaying ? stopPlayback() : startPlayback(); });
 
@@ -1302,39 +1324,6 @@ function restartOrigSource(){
   }
 }
 
-let playheadRAF = null;
-let lastHighlighted = -1;
-function startPlayheadLoop(){
-  function loop(){
-    if (!isPlaying) return;
-    const now = audioCtx.currentTime;
-    let lastStep = -1;
-    while (scheduledMarks.length && scheduledMarks[0].time <= now){
-      lastStep = scheduledMarks.shift().step;
-    }
-    if (lastStep !== -1 && lastStep !== lastHighlighted){
-      lastHighlighted = lastStep;
-      drawPlayScopeTick(lastStep);
-    }
-    playheadRAF = requestAnimationFrame(loop);
-  }
-  loop();
-}
-
-function drawPlayScopeTick(stepIdx){
-  const canvas = $('playScope');
-  const {ctx, w, h} = setupCanvas(canvas);
-  if (lastSamplesForRedraw) drawStaticEditorScope(lastSamplesForRedraw, lastSampleRateForRedraw);
-  const x = (stepIdx/stepCount) * w;
-  ctx.fillStyle = 'rgba(255,255,255,0.85)';
-  ctx.fillRect(x, 0, 2, h);
-}
-
-window.addEventListener('resize', () => {
-  if ($('page-performance').classList.contains('active') && lastSamplesForRedraw){
-    drawStaticEditorScope(lastSamplesForRedraw, lastSampleRateForRedraw);
-  }
-});
 
 })();
 </script>
