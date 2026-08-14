@@ -139,7 +139,7 @@
 
   .divider{ height:1px; background:var(--line); margin:0; }
 
-  .transport{ display:flex; align-items:center; gap:9px; }
+  .transport{ display:flex; align-items:center; justify-content:center; gap:16px; }
   #playBtn{
     width:40px; height:40px; border-radius:50%; flex-shrink:0;
     background: linear-gradient(180deg, var(--cyan), #2fb9cc);
@@ -147,7 +147,6 @@
     color:#06272b; font-size:14px;
   }
   #playBtn:active{ transform: translateY(3px); box-shadow:0 1px 0 #1c7f8c; }
-  .bpm-block{ flex:1; display:flex; align-items:center; gap:8px; }
   .reset-btn{ width:34px; height:34px; border-radius:10px; background:var(--panel-2); border:1px solid var(--line); color:var(--text-dim); flex-shrink:0; font-size:13px; }
 
   /* single-line label + slider + value, used throughout to keep each
@@ -155,7 +154,7 @@
   .sl-label{ font-size:10px; color:var(--text-dim); flex-shrink:0; width:56px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .sl-val{ font-size:10px; color:var(--text); font-weight:700; flex-shrink:0; min-width:34px; text-align:right; white-space:nowrap; }
   .slider-inline{ display:flex; align-items:center; gap:8px; }
-  .slider-inline input[type=range], .bpm-block input[type=range]{ flex:1; min-width:0; }
+  .slider-inline input[type=range]{ flex:1; min-width:0; }
 
   input[type=range]{
     -webkit-appearance:none; appearance:none; width:100%; height:24px; background:transparent; margin:0;
@@ -237,12 +236,13 @@
 
       <div class="transport">
         <button class="btn" id="playBtn">&#9654;</button>
-        <div class="bpm-block">
-          <span class="sl-label">Tempo</span>
-          <input type="range" id="bpmSlider" min="40" max="220" value="100" style="--track-color: var(--amber);">
-          <span class="sl-val"><span id="bpmVal">100</span>bpm</span>
-        </div>
         <button class="reset-btn" id="reRecordBtn" title="Re-record">&#8634;</button>
+      </div>
+
+      <div class="slider-inline">
+        <span class="sl-label">Tempo</span>
+        <input type="range" id="bpmSlider" min="40" max="220" value="100" style="--track-color: var(--amber);">
+        <span class="sl-val"><span id="bpmVal">100</span>bpm</span>
       </div>
 
       <div class="divider"></div>
@@ -1020,6 +1020,22 @@ const FILTER_TYPES = [
   { key:'bandpass', label:'BP' }
 ];
 
+/* Different waveforms and playing styles carry very different amounts of
+   perceived loudness at the same nominal gain -- a sine sounds much
+   quieter than a sawtooth or square at identical amplitude because it has
+   almost no harmonic energy, and a continuous "flowing" mono voice reads
+   as far louder than short plucked notes simply because it's sounding
+   nearly all the time instead of decaying quickly. These tables correct
+   for that so switching waveform or style doesn't also silently change
+   the overall volume. Sine and Pluck are left at 1.0 as the reference
+   points (the quietest of each set); everything else is pulled down to
+   roughly match rather than boosted up, to avoid any new clipping risk. */
+const WAVEFORM_GAIN = { sine: 1.0, triangle: 0.72, sawtooth: 0.42, square: 0.38 };
+const STYLE_GAIN = { percussive: 1.0, phrased: 0.8, flowing: 0.34 };
+function synthLoudnessGain(){
+  return (WAVEFORM_GAIN[params.waveform] || 1) * (STYLE_GAIN[params.synthStyle] || 1);
+}
+
 function renderStyleBtn(){
   const s = SYNTH_STYLES.find(x => x.key === params.synthStyle) || SYNTH_STYLES[0];
   $('styleBtn').innerHTML = '<span>'+s.label+'</span><span class="cyc-hint">&#8635;</span>';
@@ -1200,7 +1216,7 @@ function playSynthNote(time, midi, velocity, weight, dur){
   // percussive pluck: quick attack, steady decay across the step
   const osc = audioCtx.createOscillator(); osc.type = params.waveform;
   osc.frequency.value = midiToFreq(midi);
-  const peak = clamp(velocity*weight*0.5, 0.02, 0.9);
+  const peak = clamp(velocity*weight*0.5*synthLoudnessGain(), 0.02, 0.9);
   const g = audioCtx.createGain();
   g.gain.setValueAtTime(0.0001, time);
   g.gain.exponentialRampToValueAtTime(peak, time+0.012);
@@ -1239,7 +1255,7 @@ function scheduleMonoNote(idx, time){
   if (st.nOn && st.note){
     ensureMonoVoice();
     const freq = midiToFreq(st.note.midi - 12);
-    const peak = clamp(Math.max(st.note.vel,0.55) * params.wSynth * 0.55, 0.02, 0.9);
+    const peak = clamp(Math.max(st.note.vel,0.55) * params.wSynth * 0.55 * synthLoudnessGain(), 0.02, 0.9);
     monoGain.gain.cancelScheduledValues(time);
     monoOsc.frequency.cancelScheduledValues(time);
     if (wasRinging){
