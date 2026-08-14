@@ -134,44 +134,44 @@
   #procMsg{ font-size:13px; color:var(--text-dim); }
 
   /* ---------- performance page (single compact panel, fits one screen) ---------- */
-  #performanceContent{ flex:1; display:flex; }
-  .device-panel{ padding:10px 14px 8px; display:flex; flex-direction:column; gap:5px; flex:1; }
+  #performanceContent{ flex:1; display:flex; min-height:0; }
+  .device-panel{ padding:8px 14px 6px; display:flex; flex-direction:column; gap:3px; flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; }
 
-  .divider{ height:1px; background:var(--line); margin:1px 0; }
+  .divider{ height:1px; background:var(--line); margin:0; }
 
-  .transport{ display:flex; align-items:center; gap:10px; }
+  .transport{ display:flex; align-items:center; gap:9px; }
   #playBtn{
-    width:46px; height:46px; border-radius:50%; flex-shrink:0;
+    width:40px; height:40px; border-radius:50%; flex-shrink:0;
     background: linear-gradient(180deg, var(--cyan), #2fb9cc);
     box-shadow: 0 4px 0 #1c7f8c;
-    color:#06272b; font-size:15px;
+    color:#06272b; font-size:14px;
   }
   #playBtn:active{ transform: translateY(3px); box-shadow:0 1px 0 #1c7f8c; }
   .bpm-block{ flex:1; }
-  .bpm-row{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:2px; }
-  .bpm-row .val{ font-family:'Unbounded'; font-size:16px; color:var(--amber); }
-  .bpm-row .lbl{ font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-dimmer); }
-  .reset-btn{ width:38px; height:38px; border-radius:10px; background:var(--panel-2); border:1px solid var(--line); color:var(--text-dim); flex-shrink:0; font-size:14px; }
+  .bpm-row{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:1px; }
+  .bpm-row .val{ font-family:'Unbounded'; font-size:15px; color:var(--amber); }
+  .bpm-row .lbl{ font-size:9px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-dimmer); }
+  .reset-btn{ width:34px; height:34px; border-radius:10px; background:var(--panel-2); border:1px solid var(--line); color:var(--text-dim); flex-shrink:0; font-size:13px; }
 
   input[type=range]{
-    -webkit-appearance:none; appearance:none; width:100%; height:30px; background:transparent; margin:0;
+    -webkit-appearance:none; appearance:none; width:100%; height:24px; background:transparent; margin:0;
     display:flex; align-items:center;
   }
   input[type=range]::-webkit-slider-runnable-track{ height:5px; border-radius:3px; background: var(--line); }
   input[type=range]::-webkit-slider-thumb{
-    -webkit-appearance:none; appearance:none; width:26px; height:26px; border-radius:50%;
-    background: var(--track-color, var(--cyan)); margin-top:-10.5px;
-    border:3px solid #101216; box-shadow:0 2px 6px rgba(0,0,0,.5);
+    -webkit-appearance:none; appearance:none; width:22px; height:22px; border-radius:50%;
+    background: var(--track-color, var(--cyan)); margin-top:-8.5px;
+    border:2.5px solid #101216; box-shadow:0 2px 6px rgba(0,0,0,.5);
   }
 
-  .section-title{ display:flex; align-items:center; gap:6px; font-size:9.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--text-dim); margin-bottom:2px; }
+  .section-title{ display:flex; align-items:center; gap:6px; font-size:9px; letter-spacing:.13em; text-transform:uppercase; color:var(--text-dim); margin-bottom:1px; }
   .section-title .swatch{ width:7px; height:7px; border-radius:2px; }
 
   .row-3col{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:7px; }
 
   .cycle-btn{
     width:100%; display:flex; align-items:center; justify-content:center; gap:5px;
-    padding:8px 3px; border-radius:9px; border:1px solid var(--line); background:var(--panel-2);
+    padding:7px 3px; border-radius:9px; border:1px solid var(--line); background:var(--panel-2);
     color:var(--text); font-family:'JetBrains Mono', monospace; font-size:10.5px; font-weight:700;
     white-space:nowrap; overflow:hidden;
   }
@@ -180,16 +180,16 @@
   .cycle-btn .cyc-hint{ color:var(--text-dimmer); font-size:11px; margin-left:1px; flex-shrink:0; }
   .cycle-btn:active{ transform: translateY(1px); }
 
-  .dual-slider-row{ display:flex; flex-direction:column; gap:2px; }
+  .dual-slider-row{ display:flex; flex-direction:column; gap:0; }
   .slider-block{ padding:0; }
   .slider-row{ display:flex; justify-content:space-between; font-size:10px; color:var(--text-dim); margin-bottom:0; }
   .slider-row .v{ color:var(--text); font-weight:700; }
 
-  .weights-grid{ display:flex; flex-direction:column; gap:2px; }
-  .weight-item .name{ display:flex; align-items:center; gap:6px; font-size:10.5px; color:var(--text-dim); margin-bottom:1px; }
+  .weights-grid{ display:flex; flex-direction:column; gap:0; }
+  .weight-item .name{ display:flex; align-items:center; gap:6px; font-size:10.5px; color:var(--text-dim); margin-bottom:0; }
   .weight-item .name .swatch{ width:7px; height:7px; border-radius:2px; }
   .dice-btn{
-    margin-left:auto; width:22px; height:22px; padding:3px; border-radius:6px;
+    margin-left:auto; width:20px; height:20px; padding:3px; border-radius:6px;
     border:1px solid var(--line); background:var(--panel-2); display:flex;
     align-items:center; justify-content:center; flex-shrink:0; transition:transform .12s;
   }
@@ -955,16 +955,24 @@ function chopFitAudioToBar(samples, sampleRate, refTimes, targetDuration, native
     const grainEnd = Math.min(totalSamples, grainStart+grainSamples);
     const grainLen = grainEnd-grainStart;
     if (grainLen > 0){
-      // sample-and-hold: repeat this grain until the next reference point
+      // sample-and-hold: repeat this grain until the next reference point.
+      // Each individual repetition gets its own short fade-in/fade-out --
+      // not just once at the start of the whole held span -- because the
+      // grain's waveform almost never lines up amplitude-wise between its
+      // own end and its own start, so every loop-back within the hold is
+      // a fresh click source, not just the first one.
       let written = 0;
       while (written < segLen){
         const n = Math.min(grainLen, segLen-written);
         for (let j=0;j<n;j++) out[outPos+written+j] = samples[grainStart+j];
+        const winLen = Math.min(Math.round(sampleRate*0.0025), Math.floor(n/3));
+        for (let j=0;j<winLen;j++){
+          const g = j/winLen;
+          out[outPos+written+j] *= g;
+          out[outPos+written+n-1-j] *= g;
+        }
         written += n;
       }
-      // tiny fade-in on each retrigger to soften the grain-boundary click
-      const fl = Math.min(Math.round(sampleRate*0.002), segLen);
-      for (let j=0;j<fl;j++) out[outPos+j] *= (j/fl);
     }
     outPos += segLen;
   }
@@ -1302,6 +1310,37 @@ function schedulerTick(){
 }
 
 let origSource = null;
+let origSourceGain = null;
+function startOrigSource(atTime){
+  const fittedBuffer = buildFittedRecordedBuffer();
+  if (!fittedBuffer) return;
+  origSource = audioCtx.createBufferSource();
+  origSource.buffer = fittedBuffer;
+  origSource.loop = true;
+  origSourceGain = audioCtx.createGain();
+  origSourceGain.gain.value = 1;
+  origSource.connect(origSourceGain);
+  origSourceGain.connect(origBus);
+  origSource.start(atTime);
+}
+function stopOrigSource(){
+  if (!origSource) return;
+  const src = origSource, g = origSourceGain;
+  origSource = null; origSourceGain = null;
+  if (g && audioCtx){
+    // fade out fast before stopping so we don't cut the waveform mid-cycle
+    const t = audioCtx.currentTime;
+    g.gain.cancelScheduledValues(t);
+    g.gain.setValueAtTime(g.gain.value, t);
+    g.gain.linearRampToValueAtTime(0.0001, t+0.012);
+    try{ src.stop(t+0.015); }catch(e){}
+    setTimeout(() => { try{ src.disconnect(); }catch(e){} try{ g.disconnect(); }catch(e){} }, 60);
+  } else {
+    try{ src.stop(); }catch(e){}
+    try{ src.disconnect(); }catch(e){}
+  }
+}
+
 function startPlayback(){
   if (isPlaying || !audioCtx) return;
   ensurePlaybackGraph();
@@ -1311,36 +1350,21 @@ function startPlayback(){
   nextNoteTime = audioCtx.currentTime + 0.05;
   schedulerTimer = setInterval(schedulerTick, INTERVAL);
   $('playBtn').innerHTML = '&#9632;';
-
-  const fittedBuffer = buildFittedRecordedBuffer();
-  if (fittedBuffer){
-    origSource = audioCtx.createBufferSource();
-    origSource.buffer = fittedBuffer;
-    origSource.loop = true;
-    origSource.connect(origBus);
-    origSource.start(nextNoteTime);
-  }
+  startOrigSource(nextNoteTime);
 }
 function stopPlayback(){
   isPlaying = false;
   if (schedulerTimer) clearInterval(schedulerTimer);
   $('playBtn').innerHTML = '&#9654;';
   cleanupMonoVoice();
-  if (origSource){ try{ origSource.stop(); }catch(e){} try{ origSource.disconnect(); }catch(e){} origSource = null; }
+  stopOrigSource();
 }
 $('playBtn').addEventListener('click', () => { isPlaying ? stopPlayback() : startPlayback(); });
 
 function restartOrigSource(){
   if (!audioCtx || !origBus) return;
-  if (origSource){ try{ origSource.stop(); }catch(e){} try{ origSource.disconnect(); }catch(e){} origSource = null; }
-  const fittedBuffer = buildFittedRecordedBuffer();
-  if (fittedBuffer){
-    origSource = audioCtx.createBufferSource();
-    origSource.buffer = fittedBuffer;
-    origSource.loop = true;
-    origSource.connect(origBus);
-    origSource.start(audioCtx.currentTime + 0.02);
-  }
+  stopOrigSource();
+  startOrigSource(audioCtx.currentTime + 0.02);
 }
 
 
