@@ -1055,8 +1055,9 @@ const FILTER_TYPES = [
    roughly match rather than boosted up, to avoid any new clipping risk. */
 const WAVEFORM_GAIN = { sine: 1.0, triangle: 0.72, sawtooth: 0.42, square: 0.38 };
 const STYLE_GAIN = { percussive: 1.0, phrased: 0.8, flowing: 0.34 };
+const SYNTH_MASTER_GAIN = 1.2; // +20% overall synth volume
 function synthLoudnessGain(){
-  return (WAVEFORM_GAIN[params.waveform] || 1) * (STYLE_GAIN[params.synthStyle] || 1);
+  return (WAVEFORM_GAIN[params.waveform] || 1) * (STYLE_GAIN[params.synthStyle] || 1) * SYNTH_MASTER_GAIN;
 }
 
 function renderStyleBtn(){
@@ -1452,6 +1453,7 @@ function schedulerTick(){
   }
 }
 
+const RECORDED_AUDIO_GAIN = 0.9; // -10% recorded audio output
 let origSource = null;
 let origSourceGain = null;
 function startOrigSource(atTime){
@@ -1461,7 +1463,7 @@ function startOrigSource(atTime){
   origSource.buffer = fittedBuffer;
   origSource.loop = true;
   origSourceGain = audioCtx.createGain();
-  origSourceGain.gain.value = 1;
+  origSourceGain.gain.value = RECORDED_AUDIO_GAIN;
   origSource.connect(origSourceGain);
   origSourceGain.connect(origBus);
   origSource.start(atTime);
