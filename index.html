@@ -1146,10 +1146,28 @@ function applyCutoffPct(pct){
   if (filterNode) filterNode.frequency.setTargetAtTime(params.cutoff, audioCtx.currentTime, 0.01);
 }
 
+// Fills every index the gesture has swept through since the last input
+// event (not just the single current index) with the current value, so a
+// fast swipe doesn't leave small gaps where an old recorded point could
+// still show through for a frame or two.
+function fillAutomationRange(fromIdx, toIdx, pct){
+  let i = fromIdx, guard = 0;
+  while (i !== toIdx && guard < AUTO_RES){
+    i = (i+1) % AUTO_RES;
+    cutoffAutomation[i] = pct;
+    guard++;
+  }
+}
+
+let cutoffDragging = false;
+let lastAutoIdx = null;
+
 let automationRAF = null;
 function automationTick(){
   if (!isPlaying) return;
-  if (hasCutoffAutomation()){
+  // don't let the loop's own playback fight the user's finger -- while
+  // they're actively touching the slider, only their gesture drives it
+  if (!cutoffDragging && hasCutoffAutomation()){
     const idx = Math.floor(loopPhase()*AUTO_RES) % AUTO_RES;
     const pct = automationValueAt(idx);
     if (pct !== null) applyCutoffPct(pct);
@@ -1161,6 +1179,10 @@ $('clrCutoffBtn').addEventListener('click', () => {
   cutoffAutomation.fill(null);
   updateClrButtonState();
 });
+
+$('cutoffSlider').addEventListener('pointerdown', () => { cutoffDragging = true; lastAutoIdx = null; });
+window.addEventListener('pointerup', () => { cutoffDragging = false; });
+$('cutoffSlider').addEventListener('pointercancel', () => { cutoffDragging = false; });
 
 
 $('bpmSlider').addEventListener('input', e => {
@@ -1184,7 +1206,9 @@ $('cutoffSlider').addEventListener('input', e => {
   if (filterNode) filterNode.frequency.setTargetAtTime(params.cutoff, audioCtx.currentTime, 0.01);
   if (isPlaying){
     const idx = Math.floor(loopPhase()*AUTO_RES) % AUTO_RES;
+    if (lastAutoIdx !== null) fillAutomationRange(lastAutoIdx, idx, pct);
     cutoffAutomation[idx] = pct;
+    lastAutoIdx = idx;
     updateClrButtonState();
   }
 });
@@ -1438,6 +1462,7 @@ function startPlayback(){
   currentStepIndex = 0;
   nextNoteTime = audioCtx.currentTime + 0.05;
   loopStartTime = nextNoteTime;
+  lastAutoIdx = null;
   schedulerTimer = setInterval(schedulerTick, INTERVAL);
   $('playBtn').innerHTML = '&#9632;';
   startOrigSource(nextNoteTime);
