@@ -1139,8 +1139,10 @@ $('sensSlider').addEventListener('input', e => {
 let synthBus = null, drumBus = null, origBus = null, filterNode = null, compressor = null, noiseBuffer = null;
 function ensurePlaybackGraph(){
   if (synthBus) return;
-  // Synth voice runs through the adjustable filter; drums and the original
-  // recording both bypass it, so filter changes only reshape the synth.
+  // Synth voice AND the original recording both run through the
+  // adjustable filter, so the cutoff/resonance/type controls shape the
+  // whole musical content together. Drums stay on their own bus and
+  // bypass it entirely, so the beat never gets muffled by a low cutoff.
   synthBus = audioCtx.createGain();
   synthBus.gain.value = params.mix;
   drumBus = audioCtx.createGain();
@@ -1156,9 +1158,9 @@ function ensurePlaybackGraph(){
   compressor = audioCtx.createDynamicsCompressor();
 
   synthBus.connect(filterNode);
+  origBus.connect(filterNode);
   filterNode.connect(compressor);
   drumBus.connect(compressor);
-  origBus.connect(compressor);
   compressor.connect(audioCtx.destination);
 
   noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate*1, audioCtx.sampleRate);
