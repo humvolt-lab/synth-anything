@@ -139,7 +139,8 @@
 
   .divider{ height:1px; background:var(--line); margin:0; }
 
-  .transport{ display:flex; align-items:center; justify-content:center; gap:16px; }
+  .control-row{ display:flex; align-items:center; gap:10px; }
+  .control-row .slider-stacked{ flex:1; min-width:0; }
   #playBtn{
     width:40px; height:40px; border-radius:50%; flex-shrink:0;
     background: linear-gradient(180deg, var(--cyan), #2fb9cc);
@@ -244,27 +245,28 @@
   <div class="page-content" id="performanceContent">
     <div class="device-panel panel">
 
-      <div class="transport">
+      <div class="control-row">
         <button class="btn" id="playBtn">&#9654;</button>
-        <button class="reset-btn" id="reRecordBtn" title="Re-record">&#8634;</button>
-      </div>
-
-      <div class="slider-stacked">
-        <div class="stacked-row"><span class="lbl">Tempo</span><span class="val"><span id="bpmVal">100</span> bpm</span></div>
-        <input type="range" id="bpmSlider" min="40" max="220" value="100" style="--track-color: var(--amber);">
+        <div class="slider-stacked">
+          <div class="stacked-row"><span class="lbl">Tempo</span><span class="val"><span id="bpmVal">100</span> bpm</span></div>
+          <input type="range" id="bpmSlider" min="40" max="220" value="100" style="--track-color: var(--amber);">
+        </div>
       </div>
 
       <div class="divider"></div>
 
-      <div class="slider-stacked">
-        <div class="stacked-row">
-          <span class="lbl">Original / Synth</span>
-          <div class="stacked-row-right">
-            <span class="val"><span id="mixVal">100</span>%</span>
-            <button class="clr-btn" id="clrMixBtn" title="Clear recorded mix motion">CLR</button>
+      <div class="control-row">
+        <button class="reset-btn" id="reRecordBtn" title="Re-record">&#8634;</button>
+        <div class="slider-stacked">
+          <div class="stacked-row">
+            <span class="lbl">Original / Synth</span>
+            <div class="stacked-row-right">
+              <span class="val"><span id="mixVal">100</span>%</span>
+              <button class="clr-btn" id="clrMixBtn" title="Clear recorded mix motion">CLR</button>
+            </div>
           </div>
+          <input type="range" id="mixSlider" min="0" max="100" value="100" style="--track-color: var(--green);">
         </div>
-        <input type="range" id="mixSlider" min="0" max="100" value="100" style="--track-color: var(--green);">
       </div>
 
       <div class="row-3col">
