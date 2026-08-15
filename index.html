@@ -149,14 +149,9 @@
   #playBtn:active{ transform: translateY(3px); box-shadow:0 1px 0 #1c7f8c; }
   .reset-btn{ width:34px; height:34px; border-radius:10px; background:var(--panel-2); border:1px solid var(--line); color:var(--text-dim); flex-shrink:0; font-size:13px; }
 
-  /* single-line label + slider + value, used throughout to keep each
-     control to one row instead of stacking a label row above it */
-  .sl-label{ font-size:10px; color:var(--text-dim); flex-shrink:0; width:56px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .sl-val{ font-size:10px; color:var(--text); font-weight:700; flex-shrink:0; min-width:34px; text-align:right; white-space:nowrap; }
-  .slider-inline{ display:flex; align-items:center; gap:8px; }
-
   /* title-above layout for the primary controls (tempo, mix, cutoff,
-     resonance) -- more legible, used where there's vertical room to spare */
+     resonance, sensitivity) -- full width, more legible, used where
+     there's vertical room to spare */
   .slider-stacked{ display:flex; flex-direction:column; gap:3px; }
   .slider-stacked .stacked-row{ display:flex; justify-content:space-between; align-items:baseline; }
   .slider-stacked .stacked-row .lbl{ font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-dim); }
@@ -170,17 +165,16 @@
   }
   .clr-btn.active{ color:var(--cyan); border-color:var(--cyan); background:rgba(79,214,232,.1); }
   .clr-btn:active{ transform: scale(0.92); }
-  .slider-inline input[type=range]{ flex:1; min-width:0; }
 
   input[type=range]{
-    -webkit-appearance:none; appearance:none; width:100%; height:24px; background:transparent; margin:0;
+    -webkit-appearance:none; appearance:none; width:100%; height:32px; background:transparent; margin:0;
     display:flex; align-items:center;
   }
-  input[type=range]::-webkit-slider-runnable-track{ height:5px; border-radius:3px; background: var(--line); }
+  input[type=range]::-webkit-slider-runnable-track{ height:6px; border-radius:3px; background: var(--line); }
   input[type=range]::-webkit-slider-thumb{
-    -webkit-appearance:none; appearance:none; width:22px; height:22px; border-radius:50%;
-    background: var(--track-color, var(--cyan)); margin-top:-8.5px;
-    border:2.5px solid #101216; box-shadow:0 2px 6px rgba(0,0,0,.5);
+    -webkit-appearance:none; appearance:none; width:30px; height:30px; border-radius:50%;
+    background: var(--track-color, var(--cyan)); margin-top:-12px;
+    border:3px solid #101216; box-shadow:0 2px 6px rgba(0,0,0,.5);
   }
 
   .section-title{ display:flex; align-items:center; gap:6px; font-size:9px; letter-spacing:.13em; text-transform:uppercase; color:var(--text-dim); margin-bottom:1px; }
@@ -263,7 +257,13 @@
       <div class="divider"></div>
 
       <div class="slider-stacked">
-        <div class="stacked-row"><span class="lbl">Original / Synth</span><span class="val"><span id="mixVal">100</span>%</span></div>
+        <div class="stacked-row">
+          <span class="lbl">Original / Synth</span>
+          <div class="stacked-row-right">
+            <span class="val"><span id="mixVal">100</span>%</span>
+            <button class="clr-btn" id="clrMixBtn" title="Clear recorded mix motion">CLR</button>
+          </div>
+        </div>
         <input type="range" id="mixSlider" min="0" max="100" value="100" style="--track-color: var(--green);">
       </div>
 
@@ -321,10 +321,15 @@
           <button class="dice-btn" data-lane="hihat" style="color:var(--cyan)" aria-label="Reinterpret hi-hat"><svg viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="5" cy="4.5" r="1.15" fill="currentColor"/><circle cx="11" cy="4.5" r="1.15" fill="currentColor"/><circle cx="5" cy="8" r="1.15" fill="currentColor"/><circle cx="11" cy="8" r="1.15" fill="currentColor"/><circle cx="5" cy="11.5" r="1.15" fill="currentColor"/><circle cx="11" cy="11.5" r="1.15" fill="currentColor"/></svg></button>
         </div>
       </div>
-      <div class="slider-inline">
-        <span class="sl-label">Sensitivity</span>
+      <div class="slider-stacked">
+        <div class="stacked-row">
+          <span class="lbl">Sensitivity</span>
+          <div class="stacked-row-right">
+            <span class="val"><span id="sensVal">35</span>%</span>
+            <button class="clr-btn" id="clrSensBtn" title="Clear recorded sensitivity motion">CLR</button>
+          </div>
+        </div>
         <input type="range" id="sensSlider" min="5" max="95" value="35" style="--track-color: var(--magenta);">
-        <span class="sl-val"><span id="sensVal">35</span>%</span>
       </div>
     </div>
   </div>
@@ -1111,13 +1116,42 @@ function syncUIToParams(){
   $('sensVal').textContent = Math.round(params.sensitivity*100);
 }
 
-/* ================= cutoff motion recording ================= */
-// Records the cutoff slider's position against loop phase (0..1, tempo-
-// independent) as it's moved during playback, then continuously plays
-// that motion back in sync with the loop -- no record button, any touch
-// of the slider while playing just overwrites that point in the curve.
+/* ================= parameter motion recording ================= */
+// Records a slider's position against loop phase (0..1, tempo-independent)
+// as it's moved during playback, then continuously plays that motion back
+// in sync with the loop -- no record button, any touch of the slider
+// while playing just overwrites that point in the curve. Generalized to
+// cover cutoff, the original/synth mix, and sensitivity.
 const AUTO_RES = 128;
-let cutoffAutomation = new Array(AUTO_RES).fill(null);
+const AUTOMATED = {
+  cutoff: {
+    sliderId:'cutoffSlider', clrBtnId:'clrCutoffBtn', buffer:new Array(AUTO_RES).fill(null), dragging:false, lastIdx:null,
+    apply(v){
+      params.cutoff = 200 * Math.pow(16000/200, v/100);
+      $('cutoffSlider').value = v;
+      $('cutoffVal').textContent = Math.round(params.cutoff);
+      if (filterNode) filterNode.frequency.setTargetAtTime(params.cutoff, audioCtx.currentTime, 0.01);
+    }
+  },
+  mix: {
+    sliderId:'mixSlider', clrBtnId:'clrMixBtn', buffer:new Array(AUTO_RES).fill(null), dragging:false, lastIdx:null,
+    apply(v){
+      params.mix = v/100;
+      $('mixSlider').value = v;
+      $('mixVal').textContent = v;
+      applyMixGains();
+    }
+  },
+  sensitivity: {
+    sliderId:'sensSlider', clrBtnId:'clrSensBtn', buffer:new Array(AUTO_RES).fill(null), dragging:false, lastIdx:null,
+    apply(v){
+      params.sensitivity = v/100;
+      $('sensSlider').value = v;
+      $('sensVal').textContent = v;
+      if (lastAnalysis) steps = buildStepsFromAnalysis(lastAnalysis, stepCount);
+    }
+  }
+};
 let loopStartTime = 0;
 
 function loopPhase(){
@@ -1126,64 +1160,70 @@ function loopPhase(){
   const elapsed = audioCtx.currentTime - loopStartTime;
   return (((elapsed % loopDur) + loopDur) % loopDur) / loopDur;
 }
-function automationValueAt(idx){
+function autoValueAt(key, idx){
+  const buf = AUTOMATED[key].buffer;
   for (let i=0;i<AUTO_RES;i++){
     const j = (idx - i + AUTO_RES) % AUTO_RES;
-    if (cutoffAutomation[j] !== null) return cutoffAutomation[j];
+    if (buf[j] !== null) return buf[j];
   }
   return null;
 }
-function hasCutoffAutomation(){
-  return cutoffAutomation.some(v => v !== null);
+function autoHas(key){
+  return AUTOMATED[key].buffer.some(v => v !== null);
 }
-function updateClrButtonState(){
-  $('clrCutoffBtn').classList.toggle('active', hasCutoffAutomation());
+function updateClrButtonState(key){
+  $(AUTOMATED[key].clrBtnId).classList.toggle('active', autoHas(key));
 }
-function applyCutoffPct(pct){
-  params.cutoff = 200 * Math.pow(16000/200, pct/100);
-  $('cutoffSlider').value = pct;
-  $('cutoffVal').textContent = Math.round(params.cutoff);
-  if (filterNode) filterNode.frequency.setTargetAtTime(params.cutoff, audioCtx.currentTime, 0.01);
-}
-
 // Fills every index the gesture has swept through since the last input
 // event (not just the single current index) with the current value, so a
 // fast swipe doesn't leave small gaps where an old recorded point could
 // still show through for a frame or two.
-function fillAutomationRange(fromIdx, toIdx, pct){
+function autoFillRange(key, fromIdx, toIdx, v){
+  const buf = AUTOMATED[key].buffer;
   let i = fromIdx, guard = 0;
   while (i !== toIdx && guard < AUTO_RES){
     i = (i+1) % AUTO_RES;
-    cutoffAutomation[i] = pct;
+    buf[i] = v;
     guard++;
   }
 }
-
-let cutoffDragging = false;
-let lastAutoIdx = null;
+function autoRecord(key, v){
+  if (!isPlaying) return;
+  const a = AUTOMATED[key];
+  const idx = Math.floor(loopPhase()*AUTO_RES) % AUTO_RES;
+  if (a.lastIdx !== null) autoFillRange(key, a.lastIdx, idx, v);
+  a.buffer[idx] = v;
+  a.lastIdx = idx;
+  updateClrButtonState(key);
+}
 
 let automationRAF = null;
 function automationTick(){
   if (!isPlaying) return;
-  // don't let the loop's own playback fight the user's finger -- while
-  // they're actively touching the slider, only their gesture drives it
-  if (!cutoffDragging && hasCutoffAutomation()){
-    const idx = Math.floor(loopPhase()*AUTO_RES) % AUTO_RES;
-    const pct = automationValueAt(idx);
-    if (pct !== null) applyCutoffPct(pct);
-  }
+  const idx = Math.floor(loopPhase()*AUTO_RES) % AUTO_RES;
+  Object.keys(AUTOMATED).forEach(key => {
+    const a = AUTOMATED[key];
+    // don't let the loop's own playback fight the user's finger -- while
+    // they're actively touching a slider, only their gesture drives it
+    if (!a.dragging && autoHas(key)){
+      const v = autoValueAt(key, idx);
+      if (v !== null) a.apply(v);
+    }
+  });
   automationRAF = requestAnimationFrame(automationTick);
 }
 
-$('clrCutoffBtn').addEventListener('click', () => {
-  cutoffAutomation.fill(null);
-  updateClrButtonState();
+Object.keys(AUTOMATED).forEach(key => {
+  const a = AUTOMATED[key];
+  const slider = $(a.sliderId);
+  slider.addEventListener('pointerdown', () => { a.dragging = true; a.lastIdx = null; });
+  slider.addEventListener('pointercancel', () => { a.dragging = false; });
+  window.addEventListener('pointerup', () => { a.dragging = false; });
+  $(a.clrBtnId).addEventListener('click', () => {
+    a.buffer.fill(null);
+    updateClrButtonState(key);
+  });
 });
-
-$('cutoffSlider').addEventListener('pointerdown', () => { cutoffDragging = true; lastAutoIdx = null; });
-window.addEventListener('pointerup', () => { cutoffDragging = false; });
-$('cutoffSlider').addEventListener('pointercancel', () => { cutoffDragging = false; });
-
 
 $('bpmSlider').addEventListener('input', e => {
   params.bpm = parseInt(e.target.value,10);
@@ -1194,23 +1234,15 @@ $('bpmSlider').addEventListener('change', () => {
 });
 
 $('mixSlider').addEventListener('input', e => {
-  params.mix = parseInt(e.target.value,10)/100;
-  $('mixVal').textContent = Math.round(params.mix*100);
-  applyMixGains();
+  const pct = parseInt(e.target.value,10);
+  AUTOMATED.mix.apply(pct);
+  autoRecord('mix', pct);
 });
 
 $('cutoffSlider').addEventListener('input', e => {
   const pct = parseInt(e.target.value,10);
-  params.cutoff = 200 * Math.pow(16000/200, pct/100);
-  $('cutoffVal').textContent = Math.round(params.cutoff);
-  if (filterNode) filterNode.frequency.setTargetAtTime(params.cutoff, audioCtx.currentTime, 0.01);
-  if (isPlaying){
-    const idx = Math.floor(loopPhase()*AUTO_RES) % AUTO_RES;
-    if (lastAutoIdx !== null) fillAutomationRange(lastAutoIdx, idx, pct);
-    cutoffAutomation[idx] = pct;
-    lastAutoIdx = idx;
-    updateClrButtonState();
-  }
+  AUTOMATED.cutoff.apply(pct);
+  autoRecord('cutoff', pct);
 });
 $('resSlider').addEventListener('input', e => {
   params.resonance = parseInt(e.target.value,10)/10;
@@ -1226,11 +1258,9 @@ function wireWeight(id, key){
 wireWeight('wSynth','wSynth'); wireWeight('wKick','wKick'); wireWeight('wSnare','wSnare'); wireWeight('wHihat','wHihat');
 
 $('sensSlider').addEventListener('input', e => {
-  params.sensitivity = parseInt(e.target.value,10)/100;
-  $('sensVal').textContent = Math.round(params.sensitivity*100);
-  if (lastAnalysis){
-    steps = buildStepsFromAnalysis(lastAnalysis, stepCount);
-  }
+  const pct = parseInt(e.target.value,10);
+  AUTOMATED.sensitivity.apply(pct);
+  autoRecord('sensitivity', pct);
 });
 
 /* ================= synth engine ================= */
@@ -1462,7 +1492,7 @@ function startPlayback(){
   currentStepIndex = 0;
   nextNoteTime = audioCtx.currentTime + 0.05;
   loopStartTime = nextNoteTime;
-  lastAutoIdx = null;
+  Object.keys(AUTOMATED).forEach(key => { AUTOMATED[key].lastIdx = null; });
   schedulerTimer = setInterval(schedulerTick, INTERVAL);
   $('playBtn').innerHTML = '&#9632;';
   startOrigSource(nextNoteTime);
