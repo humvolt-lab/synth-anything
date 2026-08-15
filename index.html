@@ -154,6 +154,22 @@
   .sl-label{ font-size:10px; color:var(--text-dim); flex-shrink:0; width:56px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .sl-val{ font-size:10px; color:var(--text); font-weight:700; flex-shrink:0; min-width:34px; text-align:right; white-space:nowrap; }
   .slider-inline{ display:flex; align-items:center; gap:8px; }
+
+  /* title-above layout for the primary controls (tempo, mix, cutoff,
+     resonance) -- more legible, used where there's vertical room to spare */
+  .slider-stacked{ display:flex; flex-direction:column; gap:3px; }
+  .slider-stacked .stacked-row{ display:flex; justify-content:space-between; align-items:baseline; }
+  .slider-stacked .stacked-row .lbl{ font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-dim); }
+  .slider-stacked .stacked-row .val{ font-family:'Unbounded'; font-size:14px; color:var(--text); }
+  .slider-stacked input[type=range]{ width:100%; }
+  .stacked-row-right{ display:flex; align-items:baseline; gap:7px; }
+  .clr-btn{
+    font-family:'JetBrains Mono', monospace; font-size:9px; font-weight:700; letter-spacing:.05em;
+    padding:2px 6px; border-radius:5px; border:1px solid var(--line); background:var(--panel-2);
+    color:var(--text-dimmer);
+  }
+  .clr-btn.active{ color:var(--cyan); border-color:var(--cyan); background:rgba(79,214,232,.1); }
+  .clr-btn:active{ transform: scale(0.92); }
   .slider-inline input[type=range]{ flex:1; min-width:0; }
 
   input[type=range]{
@@ -239,18 +255,16 @@
         <button class="reset-btn" id="reRecordBtn" title="Re-record">&#8634;</button>
       </div>
 
-      <div class="slider-inline">
-        <span class="sl-label">Tempo</span>
+      <div class="slider-stacked">
+        <div class="stacked-row"><span class="lbl">Tempo</span><span class="val"><span id="bpmVal">100</span> bpm</span></div>
         <input type="range" id="bpmSlider" min="40" max="220" value="100" style="--track-color: var(--amber);">
-        <span class="sl-val"><span id="bpmVal">100</span>bpm</span>
       </div>
 
       <div class="divider"></div>
 
-      <div class="slider-inline">
-        <span class="sl-label">Orig/Synth</span>
+      <div class="slider-stacked">
+        <div class="stacked-row"><span class="lbl">Original / Synth</span><span class="val"><span id="mixVal">100</span>%</span></div>
         <input type="range" id="mixSlider" min="0" max="100" value="100" style="--track-color: var(--green);">
-        <span class="sl-val"><span id="mixVal">100</span>%</span>
       </div>
 
       <div class="row-3col">
@@ -268,15 +282,19 @@
         </div>
       </div>
 
-      <div class="slider-inline">
-        <span class="sl-label">Cutoff</span>
+      <div class="slider-stacked">
+        <div class="stacked-row">
+          <span class="lbl">Cutoff</span>
+          <div class="stacked-row-right">
+            <span class="val"><span id="cutoffVal">1200</span> Hz</span>
+            <button class="clr-btn" id="clrCutoffBtn" title="Clear recorded cutoff motion">CLR</button>
+          </div>
+        </div>
         <input type="range" id="cutoffSlider" min="0" max="100" value="50" style="--track-color: var(--cyan);">
-        <span class="sl-val"><span id="cutoffVal">1200</span>Hz</span>
       </div>
-      <div class="slider-inline">
-        <span class="sl-label">Resonance</span>
+      <div class="slider-stacked">
+        <div class="stacked-row"><span class="lbl">Resonance</span><span class="val"><span id="resVal">1.0</span></span></div>
         <input type="range" id="resSlider" min="1" max="200" value="10" style="--track-color: var(--cyan);">
-        <span class="sl-val"><span id="resVal">1.0</span></span>
       </div>
 
       <div class="divider"></div>
@@ -1093,7 +1111,58 @@ function syncUIToParams(){
   $('sensVal').textContent = Math.round(params.sensitivity*100);
 }
 
-/* ================= controls wiring ================= */
+/* ================= cutoff motion recording ================= */
+// Records the cutoff slider's position against loop phase (0..1, tempo-
+// independent) as it's moved during playback, then continuously plays
+// that motion back in sync with the loop -- no record button, any touch
+// of the slider while playing just overwrites that point in the curve.
+const AUTO_RES = 128;
+let cutoffAutomation = new Array(AUTO_RES).fill(null);
+let loopStartTime = 0;
+
+function loopPhase(){
+  if (!isPlaying || !audioCtx) return 0;
+  const loopDur = 240/params.bpm;
+  const elapsed = audioCtx.currentTime - loopStartTime;
+  return (((elapsed % loopDur) + loopDur) % loopDur) / loopDur;
+}
+function automationValueAt(idx){
+  for (let i=0;i<AUTO_RES;i++){
+    const j = (idx - i + AUTO_RES) % AUTO_RES;
+    if (cutoffAutomation[j] !== null) return cutoffAutomation[j];
+  }
+  return null;
+}
+function hasCutoffAutomation(){
+  return cutoffAutomation.some(v => v !== null);
+}
+function updateClrButtonState(){
+  $('clrCutoffBtn').classList.toggle('active', hasCutoffAutomation());
+}
+function applyCutoffPct(pct){
+  params.cutoff = 200 * Math.pow(16000/200, pct/100);
+  $('cutoffSlider').value = pct;
+  $('cutoffVal').textContent = Math.round(params.cutoff);
+  if (filterNode) filterNode.frequency.setTargetAtTime(params.cutoff, audioCtx.currentTime, 0.01);
+}
+
+let automationRAF = null;
+function automationTick(){
+  if (!isPlaying) return;
+  if (hasCutoffAutomation()){
+    const idx = Math.floor(loopPhase()*AUTO_RES) % AUTO_RES;
+    const pct = automationValueAt(idx);
+    if (pct !== null) applyCutoffPct(pct);
+  }
+  automationRAF = requestAnimationFrame(automationTick);
+}
+
+$('clrCutoffBtn').addEventListener('click', () => {
+  cutoffAutomation.fill(null);
+  updateClrButtonState();
+});
+
+
 $('bpmSlider').addEventListener('input', e => {
   params.bpm = parseInt(e.target.value,10);
   $('bpmVal').textContent = params.bpm;
@@ -1113,6 +1182,11 @@ $('cutoffSlider').addEventListener('input', e => {
   params.cutoff = 200 * Math.pow(16000/200, pct/100);
   $('cutoffVal').textContent = Math.round(params.cutoff);
   if (filterNode) filterNode.frequency.setTargetAtTime(params.cutoff, audioCtx.currentTime, 0.01);
+  if (isPlaying){
+    const idx = Math.floor(loopPhase()*AUTO_RES) % AUTO_RES;
+    cutoffAutomation[idx] = pct;
+    updateClrButtonState();
+  }
 });
 $('resSlider').addEventListener('input', e => {
   params.resonance = parseInt(e.target.value,10)/10;
@@ -1363,9 +1437,11 @@ function startPlayback(){
   isPlaying = true;
   currentStepIndex = 0;
   nextNoteTime = audioCtx.currentTime + 0.05;
+  loopStartTime = nextNoteTime;
   schedulerTimer = setInterval(schedulerTick, INTERVAL);
   $('playBtn').innerHTML = '&#9632;';
   startOrigSource(nextNoteTime);
+  automationRAF = requestAnimationFrame(automationTick);
 }
 function stopPlayback(){
   isPlaying = false;
@@ -1373,6 +1449,7 @@ function stopPlayback(){
   $('playBtn').innerHTML = '&#9654;';
   cleanupMonoVoice();
   stopOrigSource();
+  if (automationRAF) cancelAnimationFrame(automationRAF);
 }
 $('playBtn').addEventListener('click', () => { isPlaying ? stopPlayback() : startPlayback(); });
 
