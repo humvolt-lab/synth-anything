@@ -193,6 +193,7 @@
   .cycle-btn span:not(.cyc-hint){ overflow:hidden; text-overflow:ellipsis; }
   .cycle-btn .cyc-hint{ color:var(--text-dimmer); font-size:11px; margin-left:1px; flex-shrink:0; }
   .cycle-btn:active{ transform: translateY(1px); }
+  .cycle-btn.active{ background:var(--magenta); color:#2a0a1a; border-color:var(--magenta); }
 
   .weights-grid{ display:flex; flex-direction:column; gap:4px; }
   .weight-item{ display:flex; align-items:center; gap:6px; }
@@ -279,8 +280,8 @@
           <button class="cycle-btn" id="waveBtn"></button>
         </div>
         <div>
-          <div class="section-title"><span class="swatch" style="background:var(--cyan)"></span>Filter</div>
-          <button class="cycle-btn" id="filterBtn"></button>
+          <div class="section-title"><span class="swatch" style="background:var(--magenta)"></span>Gate</div>
+          <button class="cycle-btn" id="gateBtn">Gate</button>
         </div>
       </div>
 
@@ -933,6 +934,8 @@ function runAnalysis(samples, sampleRate){
       params.cutoff = lastAnalysis.suggestedCutoff;
       stepCount = 16;
       steps = buildStepsFromAnalysis(lastAnalysis, stepCount);
+      gateEnabled = false;
+      gatePattern = null;
       syncUIToParams();
       showProcessing(false);
       showPage('page-performance');
@@ -1039,12 +1042,6 @@ const WAVEFORMS = [
   { key:'sawtooth', label:'Saw', path:'M1 14 L1 2 L13 14 L13 2 L25 14' },
   { key:'square', label:'Sqr', path:'M1 2 L1 14 L13 14 L13 2 L25 2 L25 14' }
 ];
-const FILTER_TYPES = [
-  { key:'lowpass', label:'LP' },
-  { key:'highpass', label:'HP' },
-  { key:'bandpass', label:'BP' }
-];
-
 /* Different waveforms and playing styles carry very different amounts of
    perceived loudness at the same nominal gain -- a sine sounds much
    quieter than a sawtooth or square at identical amplitude because it has
@@ -1070,10 +1067,6 @@ function renderWaveBtn(){
   const w = WAVEFORMS.find(x => x.key === params.waveform) || WAVEFORMS[0];
   $('waveBtn').innerHTML = '<svg viewBox="0 0 26 16" width="20" height="12"><path d="'+w.path+'" fill="none" stroke="#6EE7A0" stroke-width="1.6"/></svg><span>'+w.label+'</span><span class="cyc-hint">&#8635;</span>';
 }
-function renderFilterBtn(){
-  const f = FILTER_TYPES.find(x => x.key === params.filterType) || FILTER_TYPES[0];
-  $('filterBtn').innerHTML = '<span>'+f.label+'</span><span class="cyc-hint">&#8635;</span>';
-}
 $('styleBtn').addEventListener('click', () => {
   const idx = SYNTH_STYLES.findIndex(x => x.key === params.synthStyle);
   params.synthStyle = SYNTH_STYLES[(idx+1) % SYNTH_STYLES.length].key;
@@ -1086,11 +1079,31 @@ $('waveBtn').addEventListener('click', () => {
   renderWaveBtn();
   if (monoOsc) monoOsc.type = params.waveform;
 });
-$('filterBtn').addEventListener('click', () => {
-  const idx = FILTER_TYPES.findIndex(x => x.key === params.filterType);
-  params.filterType = FILTER_TYPES[(idx+1) % FILTER_TYPES.length].key;
-  renderFilterBtn();
-  if (filterNode) filterNode.type = params.filterType;
+
+/* Rhythmic gate for the original audio: a toggle, not a cycle button.
+   When switched on, it snapshots which of the current 16 steps have any
+   drum hit (kick, snare, or hihat) and gates the ORIGINAL AUDIO closed on
+   those steps, open on the rest -- the audio only speaks in the gaps the
+   drums leave, a complementary call-and-response texture instead of the
+   two competing. That snapshot is frozen for as long as the gate stays
+   on: reworking the drum pattern (dice rerolls, weight/sensitivity
+   changes) while it's engaged does NOT change the gate shape live -- only
+   switching it off and back on takes a fresh snapshot. */
+const GATE_DUCK_LEVEL = 0.06;
+let gateEnabled = false;
+let gatePattern = null;
+function renderGateBtn(){
+  $('gateBtn').classList.toggle('active', gateEnabled);
+}
+$('gateBtn').addEventListener('click', () => {
+  gateEnabled = !gateEnabled;
+  if (gateEnabled){
+    gatePattern = steps.map(st => !!(st.kOn || st.sOn || st.hOn));
+  } else {
+    gatePattern = null;
+    if (gateGain && audioCtx) gateGain.gain.setTargetAtTime(1, audioCtx.currentTime, 0.01);
+  }
+  renderGateBtn();
 });
 
 /* ================= UI sync ================= */
@@ -1103,7 +1116,7 @@ function syncUIToParams(){
 
   renderStyleBtn();
   renderWaveBtn();
-  renderFilterBtn();
+  renderGateBtn();
 
   const cutoffPct = Math.round(100 * (Math.log(params.cutoff/200) / Math.log(16000/200)));
   $('cutoffSlider').value = clamp(cutoffPct,0,100);
@@ -1445,6 +1458,12 @@ function scheduleStep(idx, time){
   if (st.kOn) playKick(time, Math.max(st.kick,0.6), params.wKick);
   if (st.sOn) playSnare(time, Math.max(st.snare,0.6), params.wSnare);
   if (st.hOn) playHihat(time, Math.max(st.hihat,0.6), params.wHihat);
+
+  if (gateEnabled && gatePattern && gateGain){
+    const closed = gatePattern[idx % gatePattern.length];
+    gateGain.gain.cancelScheduledValues(time);
+    gateGain.gain.setTargetAtTime(closed ? GATE_DUCK_LEVEL : 1, time, 0.01);
+  }
 }
 
 function schedulerTick(){
@@ -1458,6 +1477,7 @@ function schedulerTick(){
 const RECORDED_AUDIO_GAIN = 0.9; // -10% recorded audio output
 let origSource = null;
 let origSourceGain = null;
+let gateGain = null;
 function startOrigSource(atTime){
   const fittedBuffer = buildFittedRecordedBuffer();
   if (!fittedBuffer) return;
@@ -1466,14 +1486,17 @@ function startOrigSource(atTime){
   origSource.loop = true;
   origSourceGain = audioCtx.createGain();
   origSourceGain.gain.value = RECORDED_AUDIO_GAIN;
+  gateGain = audioCtx.createGain();
+  gateGain.gain.value = 1;
   origSource.connect(origSourceGain);
-  origSourceGain.connect(origBus);
+  origSourceGain.connect(gateGain);
+  gateGain.connect(origBus);
   origSource.start(atTime);
 }
 function stopOrigSource(){
   if (!origSource) return;
   const src = origSource, g = origSourceGain;
-  origSource = null; origSourceGain = null;
+  origSource = null; origSourceGain = null; gateGain = null;
   if (g && audioCtx){
     // fade out fast before stopping so we don't cut the waveform mid-cycle
     const t = audioCtx.currentTime;
