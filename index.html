@@ -898,25 +898,50 @@ function completeDrumPattern(arr, count){
   }
 }
 
-/* Dice buttons: reinterpret one instrument lane at a time by nudging its
-   current pattern -- flip a handful of steps on/off, and for the synth
-   lane also give some notes a small random pitch shift. This is a "roll
-   again, a little differently" tool, not a fresh analysis, so it stays
-   grounded in the existing pattern rather than replacing it outright. */
+/* Dice buttons: reinterpret one instrument lane at a time. Every press
+   must produce a real, audible/visible change -- otherwise the button
+   gives no feedback -- so instead of independently coin-flipping each
+   step (which can occasionally roll zero changes by chance), we pick a
+   guaranteed-nonzero number of distinct steps to flip.
+   Drum lanes (kick/snare/hihat) have no obligation to stay grounded in
+   the original audio -- any step is fair game, even if that drifts from
+   what was actually detected, since the point is a fun "roll again."
+   The synth lane is different: it should always shift too, but stays
+   relevant by only ever revealing/hiding pitch candidates the analysis
+   actually found (steps where st.note exists, just may be below the
+   sensitivity threshold) and only nudging pitch by a semitone or two,
+   rather than inventing notes out of nothing. */
+function shuffle(arr){
+  const a = arr.slice();
+  for (let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
 function rerollLane(laneKey){
   if (!steps || !steps.length) return;
-  const onKey = laneKey === 'note' ? 'nOn' : laneKey === 'kick' ? 'kOn' : laneKey === 'snare' ? 'sOn' : 'hOn';
-  steps.forEach(st => {
-    if (Math.random() < 0.22) st[onKey] = !st[onKey];
-  });
+
   if (laneKey === 'note'){
+    const eligible = steps.map((st,i)=>i).filter(i => steps[i].note);
+    if (eligible.length){
+      const flips = Math.min(eligible.length, Math.max(2, Math.round(eligible.length*0.3)));
+      shuffle(eligible).slice(0, flips).forEach(i => { steps[i].nOn = !steps[i].nOn; });
+    }
     const shifts = [-2,-1,1,2];
-    steps.forEach(st => {
-      if (st.nOn && st.note && Math.random() < 0.35){
+    const activeNow = steps.map((st,i)=>i).filter(i => steps[i].nOn && steps[i].note);
+    if (activeNow.length){
+      const nudges = Math.min(activeNow.length, Math.max(1, Math.round(activeNow.length*0.35)));
+      shuffle(activeNow).slice(0, nudges).forEach(i => {
         const shift = shifts[Math.floor(Math.random()*shifts.length)];
-        st.note = { midi: st.note.midi + shift, vel: st.note.vel };
-      }
-    });
+        steps[i].note = { midi: steps[i].note.midi + shift, vel: steps[i].note.vel };
+      });
+    }
+  } else {
+    const onKey = laneKey === 'kick' ? 'kOn' : laneKey === 'snare' ? 'sOn' : 'hOn';
+    const idxs = steps.map((_,i)=>i);
+    const flips = Math.max(2, Math.round(steps.length*0.25));
+    shuffle(idxs).slice(0, flips).forEach(i => { steps[i][onKey] = !steps[i][onKey]; });
   }
 }
 document.querySelectorAll('.dice-btn').forEach(btn => {
